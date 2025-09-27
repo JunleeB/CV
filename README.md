@@ -1,7 +1,7 @@
 # QA
 # QA 포트폴리오 📚
 
-![Made with Love](https://img.shields.io/badge/Build-Love-informational)
+
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Selenium](https://img.shields.io/badge/Selenium-Automation-success)
 ![ISTQB](https://img.shields.io/badge/ISTQB-CTFL-informational)
