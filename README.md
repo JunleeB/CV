@@ -14,7 +14,7 @@
 - [2. Postman & API 테스트](#2-postman--api-테스트)
 - [3. Jenkins CI/CD](#3-jenkins-cicd)
 - [4. Jira/Confluence](#4-jiraconfluence)
-- [5. 정리 노트(요약)](#5-정리-노트요약)
+- [5.Projects]
 
 ---
 
