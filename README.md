@@ -3,15 +3,15 @@
 </p>
 
 <p align="center">
-  <!-- 기술 스택 배지 스타일 -->
-  <span style="background-color:#3572A5; color:white; padding:4px 10px; border-radius:4px; margin:2px;">Python</span>
-  <span style="background-color:#1f77b4; color:white; padding:4px 10px; border-radius:4px; margin:2px;">Playwright</span>
-  <span style="background-color:#FF6C37; color:white; padding:4px 10px; border-radius:4px; margin:2px;">Postman</span>
-  <span style="background-color:#8B0000; color:white; padding:4px 10px; border-radius:4px; margin:2px;">정보처리기사</span>
-  <span style="background-color:#006400; color:white; padding:4px 10px; border-radius:4px; margin:2px;">SQL</span>
-  <span style="background-color:#BA55D3; color:white; padding:4px 10px; border-radius:4px; margin:2px;">ISTQB</span>
-  <span style="background-color:#FF4500; color:white; padding:4px 10px; border-radius:4px; margin:2px;">Appium</span>
+  <img src="https://img.shields.io/badge/Python-3.10-blue" alt="Python" />
+  <img src="https://img.shields.io/badge/Playwright-✓-blueviolet" alt="Playwright" />
+  <img src="https://img.shields.io/badge/Postman-✓-orange" alt="Postman" />
+  <img src="https://img.shields.io/badge/정보처리기사-합격-green" alt="정보처리기사" />
+  <img src="https://img.shields.io/badge/SQL-✓-darkgreen" alt="SQL" />
+  <img src="https://img.shields.io/badge/ISTQB-✓-purple" alt="ISTQB" />
+  <img src="https://img.shields.io/badge/Appium-✓-red" alt="Appium" />
 </p>
+
 
 # 안녕하세요! 품질을 코드로 증명하는 QA 엔지니어, **[본인 이름]**입니다.
 
