@@ -1,40 +1,83 @@
-# 안녕하세요! 품질을 코드로 증명하는 QA 엔지니어, [배준이]입니다. 👋
+<!-- 배너 이미지 -->
+<p align="center">
+  <img src="assets/banner.png" alt="배너 이미지" />
+</p>
 
-[![Hits](https://hits.seeyounext.com/views/badge.svg)](https://hits.seeyounext.com) 
-> "테스트는 파괴가 아닌, 신뢰를 구축하는 과정입니다."
-
-## 🚀 핵심 역량 & 스택
-
-| 분야 | 주요 기술/도구 | 활용 수준 |
-| :--- | :--- | :--- |
-| **테스트 자동화** | Python (pytest, unittest), Playwright / Selenium, Appium | ⭐⭐⭐⭐⭐ |
-| **성능/부하 테스트** | JMeter, Locust | ⭐⭐⭐⭐ |
-| **협업/버그 트래킹** | Jira, Confluence, **Notion (문서화 및 테스트 계획)** | ⭐⭐⭐⭐⭐ |
-| **CI/CD** | GitHub Actions / Jenkins | ⭐⭐⭐ |
-
-## ✨ 대표 QA 프로젝트
-
-| 프로젝트명 | 한 줄 요약 | 주요 역할 (QA) | GitHub / 데모 링크 |
-| :--- | :--- | :--- | :--- |
-| **[프로젝트 1] E-Commerce E2E 자동화 프레임워크 구축** | Playwright를 활용하여 Critical Path 15개 시나리오를 자동화하고 CI/CD 파이프라인에 통합. | 테스트 케이스 설계, 프레임워크 구축, 50개 버그 발견 및 리포팅. | [바로가기] |
-| **[프로젝트 2] API 성능 테스트 및 병목 구간 분석** | JMeter를 사용하여 1000명 동시 접속 부하 테스트 진행 및 DB 쿼리 성능 개선 기여. | 부하 시나리오 설계, 테스트 결과 분석 및 병목 구간 개발팀 전달. | [바로가기] |
-| **[프로젝트 3] [미니 토이 프로젝트] 모바일 앱 접근성 테스트** | Appium과 WCAG 가이드라인 기반 접근성 테스트 케이스 작성 및 리포트. | WCAG 2.1 A, AA 레벨 준수 여부 검증 및 개선안 제시. | [바로가기] |
-
-## 📚 노션 (Notion) 연동 - 깊이 있는 QA 지식 증명 (차별성!)
-
-노션에 정리한 학습 내용을 **QA 직무 관련 주제**로 분류하고, 깃허브 `README.md`에서 **핵심 지식 문서**로 링크합니다. 이는 단순 코딩 능력을 넘어, **QA 이론에 대한 이해도와 정리 능력**을 보여줍니다.
-
-| 분류 | 내용 예시 | 노션 상세 페이지 링크 |
-| :--- | :--- | :--- |
-| **QA 이론 & 전략** | **테스트 피라미드 (Test Pyramid) 심층 분석** / **휴리스틱 테스트 (Heuristic Testing) 가이드** | [Notion Page Link] |
-| **기술 & 도구 학습** | **Playwright 환경 설정 및 코드 구조 최적화 회고** / **REST API 테스트 코드 작성 모범 사례** | [Notion Page Link] |
-| **스터디/회고** | **2024년 상반기 QA 스터디 참여 기록 및 배운 점** / **프로젝트 실패 사례 분석 및 교훈** | [Notion Page Link] |
-
-## 💬 연락 및 소통 채널
-
-[junlee5985@gmail.com] 
+<h1 align="center">안녕하세요! 품질을 코드로 증명하는 QA 엔지니어, **배준이**입니다 👋</h1>
+<p align="center"><em>“테스트는 파괴가 아닌, 신뢰를 구축하는 과정입니다.”</em></p>
 
 ---
+
+## 🔍 목차  
+1. 📚 핵심 역량 & 스택  
+2. 🧠 공부 노트 & 정리 자료  
+3. 🛠 주요 프로젝트  
+4. 📫 연락 & 기타  
+
+---
+
+## 1. 📚 핵심 역량 & 스택  
+
+| 분야 | 기술 / 도구 | 숙련도 |
+|------|--------------|--------|
+| 🧪 테스트 자동화 | ![Python](assets/tool-icons/python.svg) Python (pytest, unittest) <br> Playwright / Selenium | █████▌ (상) |
+| 🌐 API / 부하 테스트 | ![Postman](assets/tool-icons/postman.svg) Postman <br> JMeter / Locust | ████   |
+| 📝 문서 & 협업 | Jira / Confluence <br> Notion (테스트 계획 정리) | █████ |
+| ⚙️ CI / DevOps | GitHub Actions / Jenkins | ███    |
+
+> 🛠 뱃지 예시:  
+> ![Build Status](https://img.shields.io/github/actions/workflow/status/yourusername/qa-portfolio/ci.yml)  
+> ![Coverage](https://img.shields.io/badge/coverage-85%25-green)  
+
+---
+
+## 2. 🧠 공부 노트 & 정리 자료  
+
+제가 학습하면서 정리해 둔 노트입니다.  
+각 노트에는 중요한 개념 + 코드 예시 + 제가 느낀 인사이트가 담겨 있어요.
+
+| 주제 | 요약 / 핵심 내용 | 링크 |
+|------|------------------|------|
+| **Postman 정리 노트** | HTTP 요청/응답 구조, 스크립트 작성, 테스트 흐름 예시 | [노트 보기](study-notes/Postman.md) |
+| **pytest 정리 노트** | fixture, assertion, parametrize + 코드 예시 포함 | [노트 보기](study-notes/pytest.md) |
+
+> 🧩 이 노트에서 배운 개념들은 프로젝트에도 적용해 두었어요 —  
+> 예: `pytest.fixture` 패턴 → 프로젝트 A의 반복 API 요청 구조에 활용  
+
+---
+
+## 3. 🛠 주요 프로젝트  
+
+### 📦 프로젝트 A: 쇼핑몰 API 자동화 테스트  
+- **한 줄 요약**: 쇼핑몰의 핵심 API 흐름(회원가입 → 로그인 → 상품 조회 → 주문)을 자동화 테스트  
+- **역할 / 기여**:  
+  - 테스트 케이스 설계 및 분류 (정상 / 오류 케이스)  
+  - pytest 기반 자동화 스크립트 구현  
+  - 테스트 결과 리포트 생성 + HTML 리포트 제공  
+  - 실패 케이스에 대해 버그 리포트 초안 작성  
+- **사용 기술**: Python, pytest, requests, GitHub Actions  
+- **데모 & 리포트 링크**:  
+  [데모 보기](#) | [리포트 다운로드](projects/project-A/report.html)  
+- **스크린샷**:  
+  ![프로젝트 A 스크린샷](assets/project-A-screenshot.png)  
+
+#### 📂 프로젝트 A 폴더 구조
+
+---
+
+## 4. 📫 연락 & 기타  
+
+- 📧 이메일: junyi@example.com  
+- 🔗 LinkedIn: [내 링크드인](https://…)  
+- 🌐 노션 공개 노트: https://www.notion.so/…  
+
+---
+
+> ✨ 이 포트폴리오는 계속해서 업데이트할 예정이에요.  
+> 새로운 프로젝트, 학습 노트, 개선된 리포트 등을 계속 추가할 거니까  
+> 자주 들러주세요! 😊  
+
+
 
 
 
