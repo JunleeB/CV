@@ -1,19 +1,20 @@
+<h1 align="center">안녕하세요! 품질을 코드로 증명하는 QA 엔지니어, **[본인 이름]**입니다.</h1>
+
 <p align="center">
   <img src="assets/banner.png" alt="배너 이미지" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10-blue" alt="Python" />
-  <img src="https://img.shields.io/badge/Playwright-✓-blueviolet" alt="Playwright" />
-  <img src="https://img.shields.io/badge/Postman-✓-orange" alt="Postman" />
-  <img src="https://img.shields.io/badge/정보처리기사-합격-green" alt="정보처리기사" />
-  <img src="https://img.shields.io/badge/SQL-✓-darkgreen" alt="SQL" />
-  <img src="https://img.shields.io/badge/ISTQB-✓-purple" alt="ISTQB" />
-  <img src="https://img.shields.io/badge/Appium-✓-red" alt="Appium" />
+  <img src="https://img.shields.io/badge/Python-3.10-blue?logo=python" alt="Python Badge" />
+  <img src="https://img.shields.io/badge/Playwright-✓-violet?logo=playwright" alt="Playwright Badge" />
+  <img src="https://img.shields.io/badge/Postman-✓-orange?logo=postman" alt="Postman Badge" />
+  <img src="https://img.shields.io/badge/정보처리기사-Pass-green" alt="정보처리기사 Badge" />
+  <img src="https://img.shields.io/badge/SQL-✓-darkgreen?logo=postgresql" alt="SQL Badge" />
+  <img src="https://img.shields.io/badge/ISTQB-✓-purple" alt="ISTQB Badge" />
+  <img src="https://img.shields.io/badge/Appium-✓-red?logo=appium" alt="Appium Badge" />
 </p>
 
 
-# 안녕하세요! 품질을 코드로 증명하는 QA 엔지니어, **[본인 이름]**입니다.
 
 [![Hits](https://hits.seeyounext.com/views/badge.svg)](https://hits.seeyounext.com)  
 > 기술 스택으로 말하는 제 QA 역량
