@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Playwright-2EAD33?style=flat&logo=playwright&logoColor=white" alt="Playwright" />
   <img src="https://img.shields.io/badge/Postman-FF6C37?style=flat&logo=postman&logoColor=white" alt="Postman" />
   <img src="https://img.shields.io/badge/정보처리기사-228B22?style=flat" alt="정보처리기사" />
-  <img src="https://img.shields.io/badge/SQL-336791?style=flat&logo=postgresql&logoColor=white" alt="SQL" />
+  <img src="https://img.shields.io/badge/SQL-336791?style=flat&logo=postgresql&logoColor=white" alt="SQLD" />
   <img src="https://img.shields.io/badge/ISTQB-6A0DAD?style=flat" alt="ISTQB" />
   <img src="https://img.shields.io/badge/Appium-FF4500?style=flat&logo=appium&logoColor=white" alt="Appium" />
 </p>
