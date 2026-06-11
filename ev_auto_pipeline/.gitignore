@@ -1,0 +1,79 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# 대용량 ML 파일
+checkpoints/
+models/
+runs/
+*.pt
+*.pth
+*.onnx
+*.torchscript
+
+# 데이터셋 (data.yaml만 남기고 이미지/라벨 제외)
+datasets/fire_smoke/train/
+datasets/fire_smoke/valid/
+datasets/fire_smoke/test/
+datasets/real_fire_smoke_v3/train/
+datasets/real_fire_smoke_v3/valid/
+datasets/cctv_fire_synth/train/
+datasets/cctv_fire_synth/valid/
+datasets/firesmoke_real/
+datasets/training_real/
+datasets/cctv_fire_test/
+datasets/*.zip
+
+# 업로드된 이미지
+uploads/
+dataset/
+output/
+output_*/
+test_output/
+mirror_preview/
+*.zip
+
+# 데이터베이스
+annotation.db
+pgdata/
+backups/
+datasets_saved/
+
+# 로그 / 임시
+logs/
+*.log
+.cache/
+
+# 프론트엔드 빌드
+frontend/node_modules/
+frontend/dist/
+backend/static/
+
+# 환경 변수
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 민감 파일
+*.pptx
+debug_*.py
+find_mirror_zone.py
+auto_label.py
+test_label.py
+train.py

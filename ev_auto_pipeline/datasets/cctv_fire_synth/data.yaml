@@ -1,0 +1,6 @@
+path: /home1/junlee/ev_auto_pipeline/datasets/cctv_fire_synth
+train: train/images
+val: valid/images
+
+nc: 2
+names: ['fire', 'smoke']
