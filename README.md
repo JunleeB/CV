@@ -20,8 +20,6 @@
 |---|---|---|
 | **객체 탐지 / 세그멘테이션** | YOLO11, SAM2 (Meta), Grounding DINO (제로샷) | ★★★★★ |
 | **VLM 파이프라인 설계** | Qwen3-VL 기반 역할 분리 파이프라인, 프롬프트/추론 최적화 | ★★★★☆ |
-| **백엔드** | FastAPI, SQLAlchemy, PostgreSQL, JWT 인증 | ★★★★☆ |
-| **프론트엔드** | React 19, TypeScript, Konva.js(캔버스), Zustand | ★★★☆☆ |
 | **ML 인프라 / 학습** | PyTorch, Ultralytics, SLURM GPU 클러스터, 멀티 GPU 추론 서버 구성 | ★★★★☆ |
 | **소프트웨어 자격 & 이론** | 정보처리기사, SQLD | ★★★☆☆ |
 
@@ -46,13 +44,6 @@
 
 ---
 
-## 📚 노션 (Notion) 연동 — 정리된 학습 자료
-
-| 분류 | 내용 예시 | 노션 링크 |
-|---|---|---|
-| **CV / ML 이론** | 객체 탐지·세그멘테이션 모델 비교, 도메인 갭 대응 전략 정리 | [Notion 페이지](https://www.notion.so/…) |
-| **도구 / 인프라 학습** | GPU 인프라 구성, SLURM 사용법, FastAPI/React 아키텍처 정리 | [Notion 페이지](https://www.notion.so/…) |
-| **자격증 / 회고 / 스터디 기록** | 정보처리기사·SQLD 준비, 프로젝트 트러블슈팅 회고 | [Notion 페이지](https://www.notion.so/…) |
 
 ---
 
