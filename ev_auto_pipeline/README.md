@@ -16,6 +16,7 @@
 같은 파이프라인(YOLO11 + SAM2)을 서로 다른 두 CCTV 도메인에 적용하며 겪은 문제와 해결 과정입니다.
 아래 사례의 발주처명은 비공개 계약 건으로, 업종만 표기했습니다.
 
+<a name="project-a"></a>
 ### A. 엘리베이터 CCTV 자동 어노테이션 (엘리베이터 제조사向)
 
 사람·반려동물을 수동으로 라벨링하던 작업을 YOLO11 + SAM2 파이프라인으로 자동화. 모델을 YOLO8 → YOLO11 + SAM2 조합으로 교체하며 mAP50-95를 0.86 → 0.94로 끌어올렸습니다.
@@ -35,17 +36,22 @@
 
 **성과**: mAP50 99.1% · 수동 어노테이션 대비 작업 속도 5배 향상
 
+<a name="project-b"></a>
 ### B. CCTV 화재·연기 자동 어노테이션 (타이어 제조사向)
 
-공개 데이터셋(Roboflow)으로 YOLO를 파인튜닝했더니 검증셋 mAP50 0.99를 찍고도 실제 CCTV 영상에서는 거의 탐지하지 못했습니다. 원인은 **학습 데이터와 실촬영 환경의 bbox 크기 분포 불일치** — 학습 데이터는 화재/연기가 화면의 14%를 차지하는 근접 촬영 위주인데, 실제 CCTV는 광각 고정 카메라라 1~5%에 불과한 소형 객체였습니다.
+범용 CCTV 환경에서 화재·연기(이미지 면적 1~5%의 소형 객체)를 특정 카메라에 종속되지 않고 자동 탐지하는 것이 목표였습니다. 오픈 데이터셋(Roboflow) 기반 YOLO 파인튜닝을 시도했으나, 실제 CCTV의 bbox 크기 분포와 달라 mAP가 0.6대에서 정체되는 도메인 갭을 확인했습니다.
 
-| 학습 vs 실환경 bbox 크기 불일치 | 검증 지표 vs 실제 탐지 성능 |
+불·연기가 연속 프레임에 걸쳐 확산되는 시간축 특성에 주목해, 단일 프레임 독립 탐지 대신 **SAM2 Video Tracking**(제로샷 — 첫 프레임 bbox 하나만으로 이후 프레임 마스크 자동 전파)으로 전환했습니다.
+
+| Before — YOLO(오픈 데이터셋 파인튜닝) 오탐·미탐 | After — SAM2 Video Tracking |
 |:---:|:---:|
-| ![bbox-gap](docs/phase2_b_bbox_size_chart.png) | ![domain-gap](docs/phase4_b_map_chart.png) |
+| ![fire-before](docs/assets/fire_before_yolo_finetuned.png) | ![fire-after](docs/assets/fire_after_sam2_video_tracking.png) |
 
-이후 제로샷 탐지(Grounding DINO)로 전략을 전환하고, ROI 필터·SAM2 정밀 재계산·박스 병합에 더해 **FrameTracker**(동일 위치에서 6프레임 이상 연속 탐지되면 정적 오탐으로 자동 억제)를 적용해 소화기·조명 등의 반복 오탐을 걸러냈습니다.
+Roboflow 단독 학습, 합성데이터(EV 주차장 배경 Copy-Paste) 단독 학습, 실촬영+합성 통합 학습 3가지 전략을 비교한 결과 실촬영+합성 통합 학습이 가장 안정적으로 수렴했습니다.
 
-![frametracker](docs/phase8_a_frametracker_chart.png)
+| mAP@50-95 | mAP@50 |
+|:---:|:---:|
+| ![map50-95](docs/assets/fire_map50-95_compare.png) | ![map50](docs/assets/fire_map50_compare.png) |
 
 **성과**: 특정 카메라 환경에 종속되지 않는 소형 객체(화재·연기) 자동 어노테이션 파이프라인 완성
 
@@ -158,10 +164,6 @@ ev-auto-annotation/
 ├── start_dev.sh
 └── requirements.txt
 ```
-
-## 문서
-
-- [기술 설명서](docs/기술설명서.md) — 전체 아키텍처, API 목록, ML 파이프라인 상세
 
 ## 라이선스
 

@@ -31,8 +31,8 @@
 
 | 프로젝트 | 한 줄 요약 | 담당 역할 | 링크 |
 |---|---|---|---|
-| **CCTV 자동 어노테이션 시스템** (엘리베이터 제조사向) | YOLO11+SAM2 기반 수동 라벨링 자동화, 거울 반사 오탐을 ROI 지정 방식으로 해결 — mAP50 99.1% | 단독 개발 (기획·ML·Backend·Frontend) | [바로가기](ev_auto_pipeline/) |
-| **CCTV 화재·연기 자동 어노테이션** (타이어 제조사向) | 학습/실환경 bbox 크기 불일치로 인한 도메인 갭 규명 → SAM2 Video Tracking 전환으로 소형 객체 탐지 해결 | 단독 개발 | [바로가기](ev_auto_pipeline/) |
+| **CCTV 자동 어노테이션 시스템** (엘리베이터 제조사向) | YOLO11+SAM2 기반 수동 라벨링 자동화, 거울 반사 오탐을 ROI 지정 방식으로 해결 — mAP50 99.1% | 단독 개발 (기획·ML·Backend·Frontend) | [바로가기](ev_auto_pipeline/#project-a) |
+| **CCTV 화재·연기 자동 어노테이션** (타이어 제조사向) | 학습/실환경 bbox 크기 불일치로 인한 도메인 갭 규명 → SAM2 Video Tracking 전환으로 소형 객체 탐지 해결 | 단독 개발 | [바로가기](ev_auto_pipeline/#project-b) |
 | **CCTV 객체 위치 추론 파이프라인** (시니어 레지던스 AI 편의 서비스) | VLM 역할 분리 설계로 42,083건 위치분류 unknown 0건 달성 | GT 파이프라인 설계 및 VLM 통합 개발 | 비공개 레포 |
 
 ### 사이드 프로젝트
