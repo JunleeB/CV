@@ -1,14 +1,15 @@
-#  안녕하세요, **[배준이]**입니다.
+# 안녕하세요, **배준이**입니다.
 
+컴퓨터 비전 파이프라인을 기획부터 서비스화까지 직접 구현하는 AI 엔지니어입니다. YOLO11 + SAM2 기반 자동 어노테이션 시스템을 여러 CCTV 도메인(엘리베이터, 화재·연기, 실내 객체 위치 추론)에 적용하며, 데이터 수집·모델 학습·백엔드/프론트엔드 개발까지 엔드투엔드로 수행한 경험이 있습니다.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/Playwright-2EAD33?style=flat&logo=playwright&logoColor=white" alt="Playwright" />
-  <img src="https://img.shields.io/badge/Postman-FF6C37?style=flat&logo=postman&logoColor=white" alt="Postman" />
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white" alt="PyTorch" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/정보처리기사-228B22?style=flat" alt="정보처리기사" />
-  <img src="https://img.shields.io/badge/SQL-336791?style=flat&logo=postgresql&logoColor=white" alt="SQLD" />
-  <img src="https://img.shields.io/badge/ISTQB-6A0DAD?style=flat" alt="ISTQB" />
-  <img src="https://img.shields.io/badge/Appium-FF4500?style=flat&logo=appium&logoColor=white" alt="Appium" />
+  <img src="https://img.shields.io/badge/SQLD-336791?style=flat" alt="SQLD" />
 </p>
 
 ---
@@ -17,43 +18,49 @@
 
 | 분야 | 주요 기술 / 도구 | 활용 수준 |
 |---|---|---|
-| **테스트 자동화** | Python (pytest, unittest), Playwright, Appium | ★★★★☆ |
-| **API / 요청 테스트 / DB 검증** | Postman, SQL (쿼리 작성 / 검증) | ★★★★☆ |
-| **소프트웨어 자격 & 이론** | 정보처리기사, ISTQB | ★★★☆☆ |
-| **CI / DevOps / 협업 도구** | GitHub Actions, Jenkins, Jira, Notion | ★★★☆☆ |
+| **객체 탐지 / 세그멘테이션** | YOLO11, SAM2 (Meta), Grounding DINO (제로샷) | ★★★★★ |
+| **VLM 파이프라인 설계** | Qwen3-VL 기반 역할 분리 파이프라인, 프롬프트/추론 최적화 | ★★★★☆ |
+| **백엔드** | FastAPI, SQLAlchemy, PostgreSQL, JWT 인증 | ★★★★☆ |
+| **프론트엔드** | React 19, TypeScript, Konva.js(캔버스), Zustand | ★★★☆☆ |
+| **ML 인프라 / 학습** | PyTorch, Ultralytics, SLURM GPU 클러스터, 멀티 GPU 추론 서버 구성 | ★★★★☆ |
+| **소프트웨어 자격 & 이론** | 정보처리기사, SQLD | ★★★☆☆ |
 
 ---
 
-## ✨ 대표 QA 프로젝트
+## ✨ 대표 프로젝트
 
-| 프로젝트명 | 한 줄 요약 | 주요 역할 (QA) | GitHub / 데모 링크 |
+실제 CCTV 환경에 자동 어노테이션 파이프라인을 적용하며 겪은 문제와 해결 과정입니다. 계약 조건상 발주처명은 업종만 표기합니다.
+
+| 프로젝트 | 한 줄 요약 | 담당 역할 | 링크 |
 |---|---|---|---|
-| **[프로젝트1] E‑Commerce E2E 자동화 프레임워크 구축** | Playwright로 핵심 흐름 15개 시나리오 자동화 + CI/CD 연동 | 테스트 케이스 설계, 프레임워크 구축, 버그 리포트 | [바로가기](#) |
-| **[프로젝트2] API 성능 테스트 & 병목 분석** | Postman + SQL 기반 API 테스트 & DB 병목 분석 | 요청 패턴 설계, 결과 분석, 개선 제안 | [바로가기](#) |
-| **[프로젝트3] 모바일 앱 접근성 & 기능 테스트** | Appium + 접근성 기준 검증 / 리포트 | 모바일 시나리오 설계, 접근성 검증 | [바로가기](#) |
+| **CCTV 자동 어노테이션 시스템** (엘리베이터 제조사向) | YOLO11+SAM2 기반 수동 라벨링 자동화, 거울 반사 오탐을 ROI 지정 방식으로 해결 — mAP50 99.1% | 단독 개발 (기획·ML·Backend·Frontend) | [바로가기](ev_auto_pipeline/) |
+| **CCTV 화재·연기 자동 어노테이션** (타이어 제조사向) | 학습/실환경 bbox 크기 불일치로 인한 도메인 갭 규명 → SAM2 Video Tracking 전환으로 소형 객체 탐지 해결 | 단독 개발 | [바로가기](ev_auto_pipeline/) |
+| **CCTV 객체 위치 추론 파이프라인** (시니어 레지던스 AI 편의 서비스) | VLM 역할 분리 설계로 42,083건 위치분류 unknown 0건 달성 | GT 파이프라인 설계 및 VLM 통합 개발 | 비공개 레포 |
+
+### 사이드 프로젝트
+
+| 프로젝트 | 한 줄 요약 | 역할 |
+|---|---|---|
+| YOLO 낙상 감지 POC | 카메라 실시간 낙상 이벤트 자동 감지 | 개인 개발 |
+| 룸메이트 매칭 시스템 | 생활습관 설문 데이터 기반 궁합 예측 및 추천 | 데이터 전처리 및 추천 알고리즘 개발 |
 
 ---
 
 ## 📚 노션 (Notion) 연동 — 정리된 학습 자료
 
-공부한 QA / 기술 / 도구 중심 정리 노트를 아래와 같이 분류해서 공유합니다.
-
 | 분류 | 내용 예시 | 노션 링크 |
 |---|---|---|
-| **QA 이론 / 전략** | 테스트 피라미드, 품질 속성, 휴리스틱 테스트 등 | [Notion 페이지](https://www.notion.so/…) |
-| **도구 / 기술 학습** | Playwright 환경 구축, SQL 쿼리 정리, Postman 스크립트 예제 | [Notion 페이지](https://www.notion.so/…) |
-| **자격증 / 회고 / 스터디 기록** | 정보처리기사 준비, ISTQB 개념 정리, 스터디 회고 | [Notion 페이지](https://www.notion.so/…) |
+| **CV / ML 이론** | 객체 탐지·세그멘테이션 모델 비교, 도메인 갭 대응 전략 정리 | [Notion 페이지](https://www.notion.so/…) |
+| **도구 / 인프라 학습** | GPU 인프라 구성, SLURM 사용법, FastAPI/React 아키텍처 정리 | [Notion 페이지](https://www.notion.so/…) |
+| **자격증 / 회고 / 스터디 기록** | 정보처리기사·SQLD 준비, 프로젝트 트러블슈팅 회고 | [Notion 페이지](https://www.notion.so/…) |
 
 ---
 
 ## 💬 연락 및 소통 채널
 
-- 이메일: yourname@example.com  
-- LinkedIn / 개인 블로그: [링크](https://…)  
-- GitHub 프로필: [github.com/yourusername](https://github.com/yourusername)
+- 이메일: junlee5985@naver.com
+- GitHub 프로필: [github.com/JunleeB](https://github.com/JunleeB)
 
 ---
 
-✨ 이 포트폴리오는 계속 성장합니다.  
-새로운 프로젝트, 학습 내용, 개선 사항이 생기면 곧바로 업데이트할 거예요.  
-자주 들러주세요! 😊  
+✨ 이 포트폴리오는 계속 성장합니다. 새로운 프로젝트, 학습 내용, 개선 사항이 생기면 곧바로 업데이트할 거예요. 자주 들러주세요! 😊
