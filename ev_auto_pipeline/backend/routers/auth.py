@@ -1,5 +1,6 @@
 """
-Simple JWT auth. Default credentials: admin / REDACTED
+Simple JWT auth. Default admin credentials are seeded from ADMIN_SEED_PASSWORD
+(see .env.example) - no hardcoded default.
 """
 import os
 from datetime import datetime, timedelta
@@ -74,7 +75,7 @@ def ensure_admin_exists(db: Session):
     if not db.query(User).filter(User.username == "kevin").first():
         db.add(User(
             username="kevin",
-            password_hash=hash_password(os.getenv("ADMIN_SEED_PASSWORD", "REDACTED")),
+            password_hash=hash_password(os.getenv("ADMIN_SEED_PASSWORD", "changeme")),
             display_name="Kevin",
             role="admin",
         ))

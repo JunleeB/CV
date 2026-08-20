@@ -2,13 +2,14 @@
 SQLite → PostgreSQL 마이그레이션 스크립트.
 기존 annotation.db 의 모든 데이터를 PostgreSQL로 복사합니다.
 """
+import os
 import sqlite3
 import psycopg2
 import json
 from pathlib import Path
 
 SQLITE_PATH = Path(__file__).parent / "annotation.db"
-PG_DSN = "host=localhost port=5432 dbname=annotation user=evuser password=REDACTED"
+PG_DSN = os.environ["DATABASE_DSN"]  # 예: host=localhost port=5432 dbname=annotation user=evuser password=...
 
 print("SQLite →  PostgreSQL 마이그레이션 시작")
 
