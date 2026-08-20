@@ -34,7 +34,41 @@
 <sub>웹 UI에서 다각형으로 실제 탐지 구역을 지정하는 ROI 설정 화면</sub>
 ![roi-ui](docs/assets/elevator_roi_ui.png)
 
-**성과**: mAP50 99.1% · 수동 어노테이션 대비 작업 속도 5배 향상
+**성과**: 수동 어노테이션 대비 작업 속도 5배 향상
+> ⚠️ 초기 mAP50 99.1%는 검증셋 무결성 문제로 부풀려진 수치였습니다 — 상세 내용과 정정된 수치는 [아래 섹션](#추론-최적화--검증셋-무결성)을 참고하세요.
+
+---
+
+## 추론 최적화 & 검증셋 무결성
+
+TensorRT 변환으로 추론 속도를 높이는 과정에서, 사용 중이던 검증셋 자체에
+데이터 누수가 있다는 걸 발견하고 재구성했습니다. 상세 방법론/재현 코드는
+[`benchmark/`](benchmark/) 참고.
+
+### 결과
+
+- PyTorch → TensorRT FP16: **9.90ms → 2.62ms (3.78배)**
+- 이득 분해: 그래프 최적화 1.92배 × 정밀도 절감 1.97배 (mAP 손실 0.42%p, 클린 홀드아웃 기준)
+- INT8 미채택 — 클린셋 기준 손실 3.26%p 대비 이득이 5~16% 범위로 불안정
+
+### 검증 과정에서 발견한 것
+
+- 데이터셋 분할 스크립트가 클립(영상) 단위가 아니라 **개별 프레임 단위**로 무작위 분할되어 있었음 — val 클립 238개 중 238개(100%)가 train에도 존재
+- NAS의 미학습 클립 352개(20,791장)로 홀드아웃을 재구성해 재학습 없이 재평가
+- **mAP50-95(B): 0.9408 → 0.8366** (실제 일반화 성능, -10.4%p)
+- 클래스별로는 person -3.6%p, **dog -17.1%p** — dog는 샘플 수·자세 다양성 부족으로 일반화 대신 암기에 의존했을 가능성
+- 누수된 검증셋은 INT8의 정확도 손실 폭도 약 3배 과소평가하고 있었음 (-1.13%p → 실제 -3.26%p)
+
+| 지표 | leaky val | 클린 홀드아웃 | 차이 |
+|---|---|---|---|
+| mAP50-95(B) | 0.9408 | 0.8366 | -10.4%p |
+| person | 0.983 | 0.947 | -3.6%p |
+| dog | 0.898 | 0.727 | -17.1%p |
+
+### 기각한 가설
+
+- **"reformat 오버헤드가 원인"** — `--fp16` fallback을 추가해 재빌드했으나 dtype 재집계 결과 float16 텐서 0개, mAP도 완전 동일 → 근거 없음으로 기각
+- **"그럼 속도차는 뭐였나"** — 동일 설정으로 재빌드해 재현성 검증 → TensorRT 빌드 간 커널 튜닝 변동성(노이즈)이었음을 확인
 
 <a name="project-b"></a>
 ### B. CCTV 화재·연기 자동 어노테이션 (타이어 제조사向)
@@ -100,8 +134,8 @@ GPU 구성: GPU 2 (YOLO+SAM2 추론) / GPU 5 (Grounding DINO) / GPU 3 (파인튜
 ### 설치
 
 ```bash
-git clone https://github.com/JunleeB/ev-auto-annotation.git
-cd ev-auto-annotation
+git clone https://github.com/JunleeB/vision-engineering.git
+cd vision-engineering/ev_auto_pipeline
 
 # Python 환경
 python3.12 -m venv venv
@@ -153,12 +187,18 @@ ev-auto-annotation/
 │       ├── pages/       # Login / Projects / Annotator / Training / Admin
 │       ├── store/       # Zustand 상태 관리
 │       └── api/         # FastAPI 클라이언트
-├── scripts/
-│   ├── generate_cctv_fire_data.py   # Copy-Paste 합성 데이터 생성기
-│   ├── train_fire_smoke.py          # YOLO 파인튜닝 스크립트
-│   ├── train_fire_smoke.sh          # SLURM 배치 스크립트
-│   └── migrate_to_pg.py            # SQLite → PostgreSQL 마이그레이션
-├── datasets/                        # data.yaml 파일만 (이미지 제외)
+├── benchmark/            # TensorRT 최적화 + 검증셋 무결성 재현 코드
+│   ├── export_onnx.py
+│   ├── build_engine.py
+│   ├── benchmark.py
+│   ├── evaluate.py
+│   ├── calibration_loader.py
+│   ├── check_split_leakage.py
+│   └── README.md
+├── train.py                        # YOLO11-seg 파인튜닝 스크립트
+├── find_mirror_zone.py             # 거울 반사 ROI 좌표 탐색 도구
+├── auto_label.py / test_label.py   # 독립 실행형 YOLO+SAM2 라벨링 스크립트
+├── migrate_to_pg.py                # SQLite → PostgreSQL 마이그레이션
 ├── docs/                            # 트러블슈팅 차트 및 리드미 이미지
 ├── start.sh
 ├── start_dev.sh
@@ -167,4 +207,4 @@ ev-auto-annotation/
 
 ## 라이선스
 
-Private repository — All rights reserved.
+TODO: 라이선스 미지정. 포트폴리오 공개 목적이면 MIT 등으로 명시 필요.
