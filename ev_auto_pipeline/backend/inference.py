@@ -1,33 +1,41 @@
 """
-YOLO + SAM2 inference.
-SAM2 image encoding results are cached per image to avoid re-encoding
-on every interactive click (~1s → ~50ms for subsequent clicks).
+YOLO + SAM2 single-GPU inference. All inference runs sequentially on one GPU;
+multiple users queue behind _model_lock. Simple and conflict-free.
+
+Device layout:
+  cuda:0  — YOLO + SAM2 inference (INFERENCE_DEVICE env var)
+  cuda:1  — Grounding DINO       (GDINO_CUDA_DEVICE env var, falls back to cuda:0)
 """
+import logging
 import os
 import threading
 import cv2
 import numpy as np
+import torch
 from collections import OrderedDict
 from pathlib import Path
 
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "2,5")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "1,2,4,7")
 
-_sam_predictor = None
+_DEVICE: str = os.getenv("INFERENCE_DEVICE", "cuda:0")
+_GDINO_DEVICE: str = os.getenv("GDINO_CUDA_DEVICE", "cuda:1")
 
-# YOLO 모델 캐시: {weights_path: YOLO instance}
-_yolo_cache: dict = {}
-_yolo_cache_lock = threading.Lock()
 _default_weights: str = ""
-
-# SAM2 임베딩 캐시: {(img_path, mtime): (features, orig_hw)}
-_embedding_cache: OrderedDict = OrderedDict()
 _CACHE_MAX = 20
-_sam_lock = threading.Lock()
 
-# SAM2 video predictor (lazy-loaded)
-_sam_video_predictor = None
-_sam_video_lock = threading.Lock()
+# ── Global models ─────────────────────────────────────────────────────────────
 
+_yolo_cache: dict = {}       # weights_path → YOLO instance
+_sam_predictor = None        # SAM2ImagePredictor
+_video_predictor = None      # SAM2VideoPredictor (lazy)
+_embedding_cache: OrderedDict = OrderedDict()
+
+# Serializes all YOLO + SAM2 operations so GPU state is never shared
+_model_lock = threading.Lock()
+_video_init_lock = threading.Lock()
+
+
+# ── Model loading ─────────────────────────────────────────────────────────────
 
 def load_models(
     yolo_weights: str = "runs/yolo11m_ev/weights/best.pt",
@@ -43,24 +51,22 @@ def load_models(
 
     abs_weights = str(base / yolo_weights)
     _default_weights = abs_weights
-    with _yolo_cache_lock:
-        _yolo_cache[abs_weights] = YOLO(abs_weights)
 
-    sam2 = build_sam2(sam2_cfg, str(base / sam2_ckpt), device=device)
+    # Warmup: pass torch.device so Ultralytics doesn't overwrite CUDA_VISIBLE_DEVICES
+    yolo_model = YOLO(abs_weights)
+    yolo_model.predict(
+        np.zeros((320, 320, 3), dtype=np.uint8),
+        device=torch.device(_DEVICE), verbose=False, imgsz=320,
+    )
+    _yolo_cache[abs_weights] = yolo_model
+
+    sam2 = build_sam2(sam2_cfg, str(base / sam2_ckpt), device=_DEVICE)
     _sam_predictor = SAM2ImagePredictor(sam2)
 
-
-def get_yolo(weights_path: str | None = None):
-    """weights_path 지정 시 해당 모델, 없으면 기본 모델 반환. 필요 시 lazy load."""
-    path = weights_path or _default_weights
-    with _yolo_cache_lock:
-        if path not in _yolo_cache:
-            from ultralytics import YOLO
-            _yolo_cache[path] = YOLO(path)
-        return _yolo_cache[path]
+    print(f"모델 로딩 완료: YOLO+SAM2 on {_DEVICE}")
 
 
-# ── SAM2 임베딩 캐시 헬퍼 ─────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _cache_key(img_path: str) -> tuple:
     try:
@@ -69,9 +75,41 @@ def _cache_key(img_path: str) -> tuple:
         return (img_path, 0)
 
 
-def _set_image_with_cache(img_path: str, img_rgb: np.ndarray) -> bool:
-    key = _cache_key(img_path)
+def _get_yolo(weights_path: str | None = None):
+    """Return (and warm-up if needed) the YOLO model for the given weights."""
+    path = weights_path or _default_weights
+    if path not in _yolo_cache:
+        from ultralytics import YOLO
+        model = YOLO(path)
+        model.predict(
+            np.zeros((320, 320, 3), dtype=np.uint8),
+            device=torch.device(_DEVICE), verbose=False, imgsz=320,
+        )
+        _yolo_cache[path] = model
+    return _yolo_cache[path]
 
+
+def _get_video_predictor():
+    """Lazy-load SAM2 video predictor (first call only)."""
+    global _video_predictor
+    if _video_predictor is not None:
+        return _video_predictor
+    with _video_init_lock:
+        if _video_predictor is not None:
+            return _video_predictor
+        base = Path(__file__).parent.parent
+        from sam2.build_sam import build_sam2_video_predictor
+        _video_predictor = build_sam2_video_predictor(
+            "configs/sam2.1/sam2.1_hiera_l.yaml",
+            str(base / "checkpoints/sam2.1_hiera_large.pt"),
+            device=_DEVICE,
+        )
+    return _video_predictor
+
+
+def _set_image_with_cache(img_path: str, img_rgb: np.ndarray) -> bool:
+    """Set SAM2 image with LRU embedding cache. Must be called under _model_lock."""
+    key = _cache_key(img_path)
     if key in _embedding_cache:
         features, orig_hw = _embedding_cache[key]
         _sam_predictor._features = features
@@ -79,26 +117,21 @@ def _set_image_with_cache(img_path: str, img_rgb: np.ndarray) -> bool:
         _sam_predictor._is_image_set = True
         _embedding_cache.move_to_end(key)
         return True
-
     _sam_predictor.set_image(img_rgb)
-
     if len(_embedding_cache) >= _CACHE_MAX:
         _embedding_cache.popitem(last=False)
-    _embedding_cache[key] = (
-        _sam_predictor._features,
-        _sam_predictor._orig_hw,
-    )
+    _embedding_cache[key] = (_sam_predictor._features, _sam_predictor._orig_hw)
     return False
 
 
 def clear_embedding_cache():
-    _embedding_cache.clear()
+    with _model_lock:
+        _embedding_cache.clear()
 
 
-# ── ROI 필터 ──────────────────────────────────────────────────────────────────
+# ── ROI / geometry helpers ────────────────────────────────────────────────────
 
 def _roi_crop_box(roi: list, img_w: int, img_h: int) -> tuple[int, int, int, int]:
-    """ROI polygon의 tight bounding box (픽셀, 이미지 범위 내로 clamp)."""
     xs = [roi[i] * img_w for i in range(0, len(roi), 2)]
     ys = [roi[i] * img_h for i in range(1, len(roi), 2)]
     x1 = max(0, int(min(xs)))
@@ -109,31 +142,21 @@ def _roi_crop_box(roi: list, img_w: int, img_h: int) -> tuple[int, int, int, int
 
 
 def _in_roi(bbox_px, img_w: int, img_h: int, roi: list | None, overlap_threshold: float = 0.3) -> bool:
-    """bbox와 ROI 폴리곤의 겹침 비율이 overlap_threshold 이상이면 True.
-    roi = flat normalized [x1,y1,x2,y2,...]. ROI 없으면 항상 True."""
     if roi is None or len(roi) < 6:
         return True
-
     pts = np.array([[roi[i] * img_w, roi[i + 1] * img_h]
                     for i in range(0, len(roi), 2)], dtype=np.int32)
-
-    # ROI 마스크 생성
     roi_mask = np.zeros((img_h, img_w), dtype=np.uint8)
     cv2.fillPoly(roi_mask, [pts], 1)
-
-    # bbox 마스크 생성
     x1, y1, x2, y2 = (int(v) for v in bbox_px)
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(img_w, x2), min(img_h, y2)
     if x2 <= x1 or y2 <= y1:
         return False
-
     bbox_area = (x2 - x1) * (y2 - y1)
     overlap = int(roi_mask[y1:y2, x1:x2].sum())
     return (overlap / bbox_area) >= overlap_threshold
 
-
-# ── Cross-class IoU 억제 ───────────────────────────────────────────────────────
 
 def _iou(a, b) -> float:
     ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
@@ -147,10 +170,9 @@ def _iou(a, b) -> float:
 
 
 def _suppress_cross_class(boxes: list, iou_threshold: float = 0.5) -> list:
-    """서로 다른 클래스 bbox가 iou_threshold 초과로 겹칠 때 confidence 낮은 쪽 제거."""
     if len(boxes) <= 1:
         return boxes
-    boxes = sorted(boxes, key=lambda b: b[1], reverse=True)  # conf 내림차순
+    boxes = sorted(boxes, key=lambda b: b[1], reverse=True)
     suppressed = set()
     for i in range(len(boxes)):
         if i in suppressed:
@@ -158,14 +180,29 @@ def _suppress_cross_class(boxes: list, iou_threshold: float = 0.5) -> list:
         for j in range(i + 1, len(boxes)):
             if j in suppressed:
                 continue
-            if boxes[i][0] == boxes[j][0]:  # 같은 클래스는 YOLO NMS가 처리
+            if boxes[i][0] == boxes[j][0]:
                 continue
             if _iou(boxes[i][2], boxes[j][2]) > iou_threshold:
                 suppressed.add(j)
     return [b for idx, b in enumerate(boxes) if idx not in suppressed]
 
 
-# ── 공개 추론 함수 ────────────────────────────────────────────────────────────
+def _nms_all(boxes: list, iou_threshold: float = 0.5) -> list:
+    """같은 클래스 포함 전체 NMS — multi-scale 결과 합산 시 사용."""
+    if len(boxes) <= 1:
+        return boxes
+    boxes = sorted(boxes, key=lambda b: b[1], reverse=True)
+    suppressed = set()
+    for i in range(len(boxes)):
+        if i in suppressed:
+            continue
+        for j in range(i + 1, len(boxes)):
+            if j in suppressed:
+                continue
+            if _iou(boxes[i][2], boxes[j][2]) > iou_threshold:
+                suppressed.add(j)
+    return [b for idx, b in enumerate(boxes) if idx not in suppressed]
+
 
 def mask_to_polygon(mask: np.ndarray, img_w: int, img_h: int):
     contours, _ = cv2.findContours(
@@ -182,18 +219,160 @@ def mask_to_polygon(mask: np.ndarray, img_w: int, img_h: int):
     return [v for x, y in pts for v in (float(x) / img_w, float(y) / img_h)]
 
 
-def _get_sam_video_predictor():
-    global _sam_video_predictor
-    if _sam_video_predictor is not None:
-        return _sam_video_predictor
-    base = Path(__file__).parent.parent
-    sam2_ckpt = "checkpoints/sam2.1_hiera_large.pt"
-    sam2_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
-    from sam2.build_sam import build_sam2_video_predictor
-    _sam_video_predictor = build_sam2_video_predictor(
-        sam2_cfg, str(base / sam2_ckpt), device="cuda"
-    )
-    return _sam_video_predictor
+# ── Public inference functions ────────────────────────────────────────────────
+
+def run_inference(img_path: str, conf_threshold: float = 0.7, yolo_conf_min: float = 0.15,
+                  roi: list | None = None, weights_path: str | None = None,
+                  multi_scale: bool = False):
+    """YOLO + SAM2 segmentation (serialized via _model_lock).
+
+    multi_scale=True: 640/1280/1920 세 해상도로 탐지 후 NMS 합산.
+    얇은 크랙처럼 스케일에 민감한 객체의 recall을 높임.
+    """
+    with _model_lock:
+        yolo = _get_yolo(weights_path)
+        img_bgr = cv2.imread(str(img_path))
+        if img_bgr is None:
+            return [], []
+        img_h, img_w = img_bgr.shape[:2]
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+
+        # conf_threshold 절반 이하로 yolo_conf_min 동적 조정 (최소 0.05)
+        effective_min_conf = min(yolo_conf_min, max(0.05, conf_threshold * 0.5))
+
+        scales = [640, 1280, 1920] if multi_scale else [None]
+        raw_boxes = []
+        for scale in scales:
+            kw = dict(conf=effective_min_conf, verbose=False)
+            if scale:
+                kw["imgsz"] = scale
+            for result in yolo(img_bgr, **kw):
+                if result.boxes is None or len(result.boxes) == 0:
+                    continue
+                for b in result.boxes:
+                    bbox = b.xyxy[0].cpu().numpy()
+                    if _in_roi(bbox, img_w, img_h, roi):
+                        raw_boxes.append((int(b.cls), float(b.conf), bbox))
+
+        # multi-scale 중복 제거: 같은 클래스 포함 전체 NMS
+        if multi_scale:
+            raw_boxes = _nms_all(raw_boxes, iou_threshold=0.5)
+        else:
+            raw_boxes = _suppress_cross_class(raw_boxes, iou_threshold=0.7)
+
+        auto_labels, review_items = [], []
+        sam_set = False
+        for cls_id, conf, bbox in raw_boxes:
+            if conf >= conf_threshold:
+                if not sam_set:
+                    _set_image_with_cache(img_path, img_rgb)
+                    sam_set = True
+                masks, _, _ = _sam_predictor.predict(box=bbox[None], multimask_output=False)
+                poly = mask_to_polygon(masks[0], img_w, img_h)
+                if poly:
+                    auto_labels.append({"class_id": cls_id, "polygon": poly, "confidence": conf})
+            else:
+                review_items.append({
+                    "class_id": cls_id,
+                    "confidence": conf,
+                    "bbox": bbox.tolist(),
+                })
+
+        return auto_labels, review_items
+
+
+def run_inference_yolo_seg(img_path: str, conf_threshold: float = 0.7, yolo_conf_min: float = 0.15,
+                           roi: list | None = None, weights_path: str | None = None):
+    """YOLO-seg 자체 폴리곤 출력 (SAM2 없음). 크랙 등 얇은 객체에 적합."""
+    with _model_lock:
+        yolo = _get_yolo(weights_path)
+        img_bgr = cv2.imread(str(img_path))
+        if img_bgr is None:
+            return [], []
+        img_h, img_w = img_bgr.shape[:2]
+
+        results = yolo(img_bgr, conf=yolo_conf_min, verbose=False)
+        auto_labels, review_items = [], []
+
+        for result in results:
+            if result.boxes is None or len(result.boxes) == 0:
+                continue
+            masks = result.masks
+            for i, box in enumerate(result.boxes):
+                if not _in_roi(box.xyxy[0].cpu().numpy(), img_w, img_h, roi):
+                    continue
+                cls_id = int(box.cls)
+                conf = float(box.conf)
+
+                if masks is not None and i < len(masks):
+                    mask_np = masks[i].data[0].cpu().numpy().astype("uint8")
+                    # 마스크가 원본 이미지 크기로 리사이즈 필요한 경우
+                    if mask_np.shape != (img_h, img_w):
+                        mask_np = cv2.resize(mask_np, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
+                    poly = mask_to_polygon(mask_np, img_w, img_h)
+                else:
+                    # mask 없으면 bbox로 fallback
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    poly = [
+                        float(x1 / img_w), float(y1 / img_h),
+                        float(x2 / img_w), float(y1 / img_h),
+                        float(x2 / img_w), float(y2 / img_h),
+                        float(x1 / img_w), float(y2 / img_h),
+                    ]
+
+                if not poly:
+                    continue
+
+                if conf >= conf_threshold:
+                    auto_labels.append({"class_id": cls_id, "polygon": poly, "confidence": conf})
+                else:
+                    review_items.append({"class_id": cls_id, "confidence": conf,
+                                         "bbox": box.xyxy[0].tolist()})
+
+        return auto_labels, review_items
+
+
+def run_inference_detect(img_path: str, conf_threshold: float = 0.7, yolo_conf_min: float = 0.15,
+                         roi: list | None = None, weights_path: str | None = None):
+    """YOLO detection only, no SAM2 (serialized via _model_lock)."""
+    with _model_lock:
+        yolo = _get_yolo(weights_path)
+        img_bgr = cv2.imread(str(img_path))
+        if img_bgr is None:
+            return [], []
+        img_h, img_w = img_bgr.shape[:2]
+
+        results = yolo(img_bgr, conf=yolo_conf_min, verbose=False)
+        auto_labels, review_items = [], []
+
+        for result in results:
+            if result.boxes is None or len(result.boxes) == 0:
+                continue
+            boxes = [
+                (int(b.cls), float(b.conf), b.xyxy[0].cpu().numpy())
+                for b in result.boxes
+                if _in_roi(b.xyxy[0].cpu().numpy(), img_w, img_h, roi)
+            ]
+            boxes = _suppress_cross_class(boxes, iou_threshold=0.7)
+
+            for cls_id, conf, bbox in boxes:
+                x1, y1, x2, y2 = bbox
+                poly = [
+                    float(x1 / img_w), float(y1 / img_h),
+                    float(x2 / img_w), float(y1 / img_h),
+                    float(x2 / img_w), float(y2 / img_h),
+                    float(x1 / img_w), float(y2 / img_h),
+                ]
+                if conf >= conf_threshold:
+                    auto_labels.append({"class_id": cls_id, "polygon": poly, "confidence": float(conf)})
+                else:
+                    review_items.append({
+                        "class_id": cls_id,
+                        "confidence": float(conf),
+                        "bbox": [float(v) for v in bbox.tolist()],
+                    })
+
+        return auto_labels, review_items
 
 
 def run_sam2_video_track(
@@ -203,13 +382,8 @@ def run_sam2_video_track(
     bbox_only: bool = False,
     progress_cb=None,
 ) -> list[dict]:
-    """
-    image_paths[0]이 씨드 프레임. 이후 프레임에 마스크 전파.
-    bbox_only=True면 마스크 → tight bbox 직사각형으로 출력 (detect 모델용).
-    Returns: [{"frame_idx": int, "class_id": int, "polygon": list[float]}, ...]
-    """
+    """SAM2 video propagation (serialized via _model_lock)."""
     import tempfile
-    import torch
     from PIL import Image as PILImage
 
     if not image_paths or not seed_bboxes_norm:
@@ -235,16 +409,18 @@ def run_sam2_video_track(
                     x_max/iw, y_max/ih, x_min/iw, y_max/ih]
         return mask_to_polygon(m, iw, ih)
 
-    with _sam_video_lock:
-        predictor = _get_sam_video_predictor()
+    # 파일 복사는 lock 밖에서 — I/O 중 다른 추론 요청을 블로킹하지 않음
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    tmp_dir = tmp_dir_obj.name
+    try:
+        for i, path in enumerate(image_paths):
+            with PILImage.open(path) as img:
+                img.convert("RGB").save(
+                    os.path.join(tmp_dir, f"{i:05d}.jpg"), "JPEG", quality=95
+                )
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for i, path in enumerate(image_paths):
-                with PILImage.open(path) as img:
-                    img.convert("RGB").save(
-                        os.path.join(tmp_dir, f"{i:05d}.jpg"), "JPEG", quality=95
-                    )
-
+        with _model_lock:
+            predictor = _get_video_predictor()
             with torch.inference_mode():
                 state = predictor.init_state(
                     video_path=tmp_dir, offload_video_to_cpu=True
@@ -261,9 +437,10 @@ def run_sam2_video_track(
                         m = (mask_t[0].cpu().numpy() > 0.0).astype(np.uint8)
                         poly = _mask_to_poly(m)
                         if poly:
+                            cls_id = seed_class_ids[obj_id] if obj_id < len(seed_class_ids) else 0
                             results.append({
                                 "frame_idx": frame_idx,
-                                "class_id": seed_class_ids[obj_id],
+                                "class_id": cls_id,
                                 "polygon": poly,
                             })
                     if progress_cb:
@@ -272,112 +449,56 @@ def run_sam2_video_track(
                 predictor.reset_state(state)
 
         return results
+    finally:
+        tmp_dir_obj.cleanup()
 
 
-def run_inference(img_path: str, conf_threshold: float = 0.7, yolo_conf_min: float = 0.15,
-                  roi: list | None = None, weights_path: str | None = None):
-    """
-    Returns:
-        auto_labels  : list of {"class_id": int, "polygon": list[float], "confidence": float}
-        review_items : list of {"class_id": int, "confidence": float, "bbox": list[float]}
-    """
-    if _sam_predictor is None:
-        raise RuntimeError("Models not loaded. Call load_models() first.")
-
-    yolo = get_yolo(weights_path)
-
+def sam_predict_bbox(img_path: str, bbox_norm: list) -> list | None:
+    """Interactive SAM2 bbox → mask (serialized via _model_lock)."""
     img_bgr = cv2.imread(str(img_path))
     if img_bgr is None:
-        return [], []
+        return None
     img_h, img_w = img_bgr.shape[:2]
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-    results = yolo(img_bgr, conf=yolo_conf_min, verbose=False)
-    auto_labels, review_items = [], []
+    x1, y1 = bbox_norm[0] * img_w, bbox_norm[1] * img_h
+    x2, y2 = bbox_norm[2] * img_w, bbox_norm[3] * img_h
+    bbox_px = np.array([[x1, y1, x2, y2]], dtype=np.float32)
 
-    with _sam_lock:
-        for result in results:
-            if result.boxes is None or len(result.boxes) == 0:
-                continue
-            boxes = [
-                (int(b.cls), float(b.conf), b.xyxy[0].cpu().numpy())
-                for b in result.boxes
-                if _in_roi(b.xyxy[0].cpu().numpy(), img_w, img_h, roi)
-            ]
-            boxes = _suppress_cross_class(boxes, iou_threshold=0.7)
+    with _model_lock:
+        _set_image_with_cache(img_path, img_rgb)
+        masks, scores, _ = _sam_predictor.predict(box=bbox_px, multimask_output=True)
 
-            sam_set = False
-            for cls_id, conf, bbox in boxes:
-                if conf >= conf_threshold:
-                    if not sam_set:
-                        _set_image_with_cache(img_path, img_rgb)
-                        sam_set = True
-                    masks, _, _ = _sam_predictor.predict(box=bbox[None], multimask_output=False)
-                    poly = mask_to_polygon(masks[0], img_w, img_h)
-                    if poly:
-                        auto_labels.append({"class_id": cls_id, "polygon": poly, "confidence": conf})
-                else:
-                    review_items.append({
-                        "class_id": cls_id,
-                        "confidence": conf,
-                        "bbox": bbox.tolist(),
-                    })
-
-    return auto_labels, review_items
+    best = int(np.argmax(scores))
+    return mask_to_polygon(masks[best], img_w, img_h)
 
 
-def run_inference_detect(img_path: str, conf_threshold: float = 0.7, yolo_conf_min: float = 0.15,
-                         roi: list | None = None, weights_path: str | None = None):
-    """
-    YOLO detection only (no SAM2). bbox → normalized rectangle polygon [x1,y1,x2,y1,x2,y2,x1,y2].
-    Returns same signature as run_inference for drop-in compatibility.
-    """
-    yolo = get_yolo(weights_path)
-
+def sam_predict_points(img_path: str, points_norm: list, point_labels: list) -> list | None:
+    """Interactive SAM2 point clicks → mask (serialized via _model_lock)."""
     img_bgr = cv2.imread(str(img_path))
     if img_bgr is None:
-        return [], []
+        return None
     img_h, img_w = img_bgr.shape[:2]
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-    results = yolo(img_bgr, conf=yolo_conf_min, verbose=False)
-    auto_labels, review_items = [], []
+    pts_px = np.array([[x * img_w, y * img_h] for x, y in points_norm], dtype=np.float32)
+    labels = np.array(point_labels, dtype=np.int32)
 
-    for result in results:
-        if result.boxes is None or len(result.boxes) == 0:
-            continue
-        boxes = [
-            (int(b.cls), float(b.conf), b.xyxy[0].cpu().numpy())
-            for b in result.boxes
-            if _in_roi(b.xyxy[0].cpu().numpy(), img_w, img_h, roi)
-        ]
-        boxes = _suppress_cross_class(boxes, iou_threshold=0.7)
+    with _model_lock:
+        _set_image_with_cache(img_path, img_rgb)
+        masks, scores, _ = _sam_predictor.predict(
+            point_coords=pts_px, point_labels=labels, multimask_output=True
+        )
 
-        for cls_id, conf, bbox in boxes:
-            x1, y1, x2, y2 = bbox
-            poly = [
-                float(x1 / img_w), float(y1 / img_h),
-                float(x2 / img_w), float(y1 / img_h),
-                float(x2 / img_w), float(y2 / img_h),
-                float(x1 / img_w), float(y2 / img_h),
-            ]
-            if conf >= conf_threshold:
-                auto_labels.append({"class_id": cls_id, "polygon": poly, "confidence": float(conf)})
-            else:
-                review_items.append({
-                    "class_id": cls_id,
-                    "confidence": float(conf),
-                    "bbox": [float(v) for v in bbox.tolist()],
-                })
-
-    return auto_labels, review_items
+    best = int(np.argmax(scores))
+    return mask_to_polygon(masks[best], img_w, img_h)
 
 
 # ── Grounding DINO ────────────────────────────────────────────────────────────
-_GDINO_DEFAULT  = "IDEA-Research/grounding-dino-base"
-_GDINO_PROMPT   = "fire . smoke"
-_GDINO_DEVICE   = "cuda:1"
 
-# 모델 캐시: {model_id: (model, processor)}
+_GDINO_DEFAULT = "IDEA-Research/grounding-dino-base"
+_GDINO_PROMPT  = "fire . smoke"
+
 _gdino_cache: dict = {}
 _gdino_lock = threading.Lock()
 
@@ -389,7 +510,6 @@ def _get_gdino(model_id: str = _GDINO_DEFAULT):
         if model_id in _gdino_cache:
             return _gdino_cache[model_id]
         from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-        import torch
         processor = AutoProcessor.from_pretrained(model_id)
         model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(_GDINO_DEVICE)
         model.eval()
@@ -398,8 +518,6 @@ def _get_gdino(model_id: str = _GDINO_DEFAULT):
 
 
 def _merge_overlapping(detections: list, iou_threshold: float = 0.3, expand: float = 0.0) -> list:
-    """같은 클래스끼리 IoU > threshold인 박스들을 union bbox로 병합.
-    expand > 0이면 IoU 계산 전 박스를 expand 비율만큼 확장 → 인접 박스도 병합됨."""
     if len(detections) <= 1:
         return detections
 
@@ -409,14 +527,12 @@ def _merge_overlapping(detections: list, iou_threshold: float = 0.3, expand: flo
         dy = (y2 - y1) * expand
         return [x1 - dx, y1 - dy, x2 + dx, y2 + dy]
 
-    # 클래스별로 분리
     by_class: dict[int, list] = {}
     for d in detections:
         by_class.setdefault(d["cls_id"], []).append(d)
 
     merged = []
     for cls_id, dets in by_class.items():
-        # Union-Find 방식으로 겹치는 박스 그룹화
         n = len(dets)
         parent = list(range(n))
 
@@ -433,7 +549,6 @@ def _merge_overlapping(detections: list, iou_threshold: float = 0.3, expand: flo
                     if pi != pj:
                         parent[pi] = pj
 
-        # 그룹별로 union bbox 계산
         groups: dict[int, list] = {}
         for i in range(n):
             groups.setdefault(find(i), []).append(dets[i])
@@ -449,10 +564,8 @@ def _merge_overlapping(detections: list, iou_threshold: float = 0.3, expand: flo
     return merged
 
 
-
 def _brightness_trim_bbox(img_path: str, x1: float, y1: float, x2: float, y2: float,
                           bright_percentile: float = 70.0) -> list | None:
-    """박스 내 밝은 픽셀 범위로 tight bbox 계산. 불꽃의 glow·바닥반사 제거용."""
     try:
         img = cv2.imread(str(img_path))
         if img is None:
@@ -465,7 +578,7 @@ def _brightness_trim_bbox(img_path: str, x1: float, y1: float, x2: float, y2: fl
             return None
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         threshold = np.percentile(gray, bright_percentile)
-        mask = gray >= max(threshold, 80)  # 절대 최소 밝기 80 보장
+        mask = gray >= max(threshold, 80)
         rows = np.any(mask, axis=1)
         cols = np.any(mask, axis=0)
         if not rows.any() or not cols.any():
@@ -479,15 +592,12 @@ def _brightness_trim_bbox(img_path: str, x1: float, y1: float, x2: float, y2: fl
 
 def _sam_tight_bbox(img_path: str, x1: float, y1: float, x2: float, y2: float,
                     img_w: int, img_h: int) -> list | None:
-    """GDINO rough bbox → SAM2 mask → tight bbox (픽셀 좌표 반환). SAM2 미로드 시 None."""
-    if _sam_predictor is None:
-        return None
+    """GDINO rough bbox → SAM2 mask → tight bbox."""
     try:
         bbox_norm = [x1 / img_w, y1 / img_h, x2 / img_w, y2 / img_h]
         polygon = sam_predict_bbox(img_path, bbox_norm)
         if not polygon or len(polygon) < 4:
             return None
-        # polygon은 정규화 좌표 flat list [x0,y0, x1,y1, ...]
         xs = [polygon[i] * img_w for i in range(0, len(polygon), 2)]
         ys = [polygon[i] * img_h for i in range(1, len(polygon), 2)]
         return [min(xs), min(ys), max(xs), max(ys)]
@@ -497,21 +607,17 @@ def _sam_tight_bbox(img_path: str, x1: float, y1: float, x2: float, y2: float,
 
 def run_inference_gdino(img_path: str, conf_threshold: float = 0.3,
                         roi: list | None = None, weights_path: str | None = None):
-    """
-    Grounding DINO zero-shot detection for fire/smoke.
-    conf_threshold 이상 → auto_labels, 0.15 이상 → review_items.
-    같은 클래스 NMS(IoU>0.5) 및 이미지 면적 40% 초과 박스 제거 적용.
-    """
-    import torch
+    """Grounding DINO zero-shot detection (runs on _GDINO_DEVICE, independent of _model_lock)."""
+    import logging
     from PIL import Image as PILImage
 
+    _log = logging.getLogger(__name__)
     model_id = weights_path if weights_path else _GDINO_DEFAULT
     model, processor = _get_gdino(model_id)
 
     image = PILImage.open(str(img_path)).convert("RGB")
     img_w, img_h = image.size
 
-    # ROI pre-crop: ROI가 있으면 ROI bbox 영역만 크롭해서 추론 → 소형 객체 탐지율 향상
     crop_x, crop_y = 0, 0
     infer_image = image
     infer_w, infer_h = img_w, img_h
@@ -536,16 +642,13 @@ def run_inference_gdino(img_path: str, conf_threshold: float = 0.3,
         target_sizes=[(infer_h, infer_w)],
     )[0]
 
-    # 1차 수집 + 대형 박스 필터 (추론 이미지 면적 40% 초과 제거)
-    import logging
-    _log = logging.getLogger(__name__)
-    _log.info("[GDINO] %s → %s detections (crop_offset=%s,%s): %s",
+    _log.info("[GDINO] %s → %d detections (crop_offset=%d,%d): %s",
               img_path, len(results["boxes"]), crop_x, crop_y,
               [(lbl, round(float(s), 2)) for lbl, s in zip(results["labels"], results["scores"])])
+
     raw = []
     for box, score, lbl in zip(results["boxes"], results["scores"], results["labels"]):
         conf = float(score)
-        # 크롭 좌표 → 원본 이미지 좌표로 역산
         x1 = float(box[0]) + crop_x
         y1 = float(box[1]) + crop_y
         x2 = float(box[2]) + crop_x
@@ -557,17 +660,14 @@ def run_inference_gdino(img_path: str, conf_threshold: float = 0.3,
         lbl_lower = lbl.lower()
         has_fire  = "fire" in lbl_lower or "flame" in lbl_lower
         has_smoke = "smoke" in lbl_lower or "haze" in lbl_lower
-        # smoke가 포함된 label은 smoke 우선 ('fire smoke' 복합 포함)
-        # 순수 fire/flame label만 fire로 분류
         if has_smoke:
             cls_id = 1
         elif has_fire:
             cls_id = 0
         else:
             cls_id = 1
-            _log.warning("[GDINO] unknown label '%s' (conf=%.2f) → smoke로 fallback", lbl, conf)
+            _log.warning("[GDINO] unknown label '%s' (conf=%.2f) → smoke fallback", lbl, conf)
 
-        # 대형 박스 필터: smoke는 40% 초과 제거, fire는 70%까지 허용 (대형 화재)
         bbox_area = (x2 - x1) * (y2 - y1)
         area_limit = 0.7 if cls_id == 0 else 0.4
         if bbox_area / infer_area > area_limit:
@@ -575,7 +675,6 @@ def run_inference_gdino(img_path: str, conf_threshold: float = 0.3,
 
         raw.append({"cls_id": cls_id, "conf": conf, "bbox": [x1, y1, x2, y2]})
 
-    # 같은 클래스 겹침 → union bbox로 병합 (expand=0.15: 인접 박스도 병합)
     raw = _merge_overlapping(raw, iou_threshold=0.3, expand=0.15)
 
     auto_labels, review_items = [], []
@@ -583,8 +682,6 @@ def run_inference_gdino(img_path: str, conf_threshold: float = 0.3,
         cls_id, conf = det["cls_id"], det["conf"]
         x1, y1, x2, y2 = det["bbox"]
 
-        # fire: 밝기 기반 trim → SAM2 순으로 정제 (glow·반사 제거)
-        # smoke: SAM2만 적용 (밝기 기준 없음)
         if cls_id == 0:
             trimmed = _brightness_trim_bbox(img_path, x1, y1, x2, y2)
             if trimmed:
@@ -609,50 +706,3 @@ def run_inference_gdino(img_path: str, conf_threshold: float = 0.3,
             })
 
     return auto_labels, review_items
-
-
-def sam_predict_bbox(img_path: str, bbox_norm: list) -> list | None:
-    """Interactive SAM2: bbox → mask. 임베딩 캐시 적용."""
-    if _sam_predictor is None:
-        raise RuntimeError("Models not loaded.")
-
-    img_bgr = cv2.imread(str(img_path))
-    if img_bgr is None:
-        return None
-    img_h, img_w = img_bgr.shape[:2]
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-
-    x1, y1 = bbox_norm[0] * img_w, bbox_norm[1] * img_h
-    x2, y2 = bbox_norm[2] * img_w, bbox_norm[3] * img_h
-    bbox_px = np.array([[x1, y1, x2, y2]], dtype=np.float32)
-
-    with _sam_lock:
-        _set_image_with_cache(img_path, img_rgb)
-        masks, scores, _ = _sam_predictor.predict(box=bbox_px, multimask_output=True)
-
-    best = int(np.argmax(scores))
-    return mask_to_polygon(masks[best], img_w, img_h)
-
-
-def sam_predict_points(img_path: str, points_norm: list, point_labels: list) -> list | None:
-    """Interactive SAM2: point clicks → mask. 임베딩 캐시 적용."""
-    if _sam_predictor is None:
-        raise RuntimeError("Models not loaded.")
-
-    img_bgr = cv2.imread(str(img_path))
-    if img_bgr is None:
-        return None
-    img_h, img_w = img_bgr.shape[:2]
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-
-    pts_px = np.array([[x * img_w, y * img_h] for x, y in points_norm], dtype=np.float32)
-    labels = np.array(point_labels, dtype=np.int32)
-
-    with _sam_lock:
-        _set_image_with_cache(img_path, img_rgb)
-        masks, scores, _ = _sam_predictor.predict(
-            point_coords=pts_px, point_labels=labels, multimask_output=True
-        )
-
-    best = int(np.argmax(scores))
-    return mask_to_polygon(masks[best], img_w, img_h)

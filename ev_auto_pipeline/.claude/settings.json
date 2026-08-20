@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home1/junlee/ev_auto_pipeline/.claude/hooks/format_on_save.sh",
+            "timeout": 30,
+            "statusMessage": "Auto-formatting saved file..."
+          }
+        ]
+      }
+    ]
+  }
+}

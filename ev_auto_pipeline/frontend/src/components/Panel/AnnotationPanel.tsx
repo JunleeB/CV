@@ -9,8 +9,8 @@ interface Props {
   saving?: boolean
 }
 
-const REVIEW_STATUSES = ['pending', 'annotated', 'review', 'done']
-const STATUS_LABELS: Record<string, string> = { pending: '대기', annotated: '완료', review: '검토', done: '승인' }
+const REVIEW_STATUSES = ['pending', 'annotated', 'review']
+const STATUS_LABELS: Record<string, string> = { pending: '대기', annotated: '완료', review: '검토' }
 
 export default function AnnotationPanel({ labels, imageStatus, onSave, onStatusChange, saving }: Props) {
   const { annotations, selectedId, activeLabelId, setSelected, removeAnnotation, setActiveLabel } = useAnnotationStore()
@@ -119,7 +119,7 @@ export default function AnnotationPanel({ labels, imageStatus, onSave, onStatusC
       {/* Keyboard shortcuts */}
       <div className="p-3 border-t border-cvat-border text-[10px] text-cvat-muted space-y-1">
         <div className="font-medium text-cvat-muted/80 uppercase tracking-wider mb-1.5">단축키</div>
-        {[['V', '선택'], ['P', '폴리곤'], ['S', 'SAM2'], ['D / ←', '이전'], ['F / →', '다음'], ['Ctrl+S', '저장/SAM확정'], ['Ctrl+1~9', '레이블 변경'], ['Del', '삭제'], ['Enter', 'SAM 확정'], ['Esc', '취소']].map(([k, v]) => (
+        {[['V', '선택'], ['R', '직사각형'], ['S', 'SAM 포인트'], ['B', 'SAM 박스'], ['D / ←', '이전'], ['F / →', '다음'], ['Ctrl+S', '저장'], ['Ctrl+1~9', '레이블 변경'], ['Del', '삭제'], ['Enter', 'SAM 확정'], ['Esc', '취소']].map(([k, v]) => (
           <div key={k} className="flex justify-between">
             <kbd className="bg-cvat-surface border border-cvat-border px-1.5 py-0.5 rounded text-[9px] font-mono">{k}</kbd>
             <span>{v}</span>

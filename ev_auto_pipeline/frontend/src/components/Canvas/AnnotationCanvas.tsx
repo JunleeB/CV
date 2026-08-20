@@ -155,6 +155,7 @@ export default function AnnotationCanvas({ imageId, imageUrl, labels, onSamError
           is_auto: false,
           needs_review: false,
         })
+        store.setTool('select')
       } else if (tool === 'sam_box') {
         triggerSamBbox([x1, y1, x2, y2])
       }
@@ -206,10 +207,23 @@ export default function AnnotationCanvas({ imageId, imageUrl, labels, onSamError
       if ((e.target as HTMLElement).tagName === 'INPUT') return
       switch (e.key.toLowerCase()) {
         case 'v': store.setTool('select'); break
-        case 'r': store.setTool('rect'); break
-        case 'p': store.setTool('polygon'); break
-        case 's': store.setTool('sam_point'); break
-        case 'b': store.setTool('sam_box'); break
+        case 'r': if (tool !== 'rect') store.setTool('rect'); break
+        case 's':
+          if (tool === 'sam_point') {
+            if (pendingPolygon) store.acceptPending()
+            store.setTool('select')
+          } else {
+            store.setTool('sam_point')
+          }
+          break
+        case 'b':
+          if (tool === 'sam_box') {
+            if (pendingPolygon) store.acceptPending()
+            store.setTool('select')
+          } else {
+            store.setTool('sam_box')
+          }
+          break
         case 'escape':
           setDrawPts([]); setBoxStart(null); setBoxEnd(null)
           store.clearSamPoints(); store.setPendingPolygon(null)
@@ -251,7 +265,7 @@ export default function AnnotationCanvas({ imageId, imageUrl, labels, onSamError
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onDblClick={handleDblClick}
-        style={{ cursor: (tool === 'polygon' || tool === 'rect' || tool.startsWith('sam')) ? 'crosshair' : 'default' }}
+        style={{ cursor: (tool === 'rect' || tool.startsWith('sam')) ? 'crosshair' : 'default' }}
       >
         <Layer>
           {/* Image — ready 됐을 때만 렌더 (페이드인) */}
@@ -411,12 +425,6 @@ export default function AnnotationCanvas({ imageId, imageUrl, labels, onSamError
           드래그로 직사각형 그리기 | Esc: 취소
         </div>
       )}
-      {tool === 'polygon' && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-cvat-surface/90 border border-cvat-border rounded-full px-3 py-1.5 text-xs text-cvat-muted">
-          클릭으로 점 추가 | 더블클릭 또는 Enter로 완성 | Esc: 취소
-        </div>
-      )}
-
       {/* Zoom level */}
       <div className="absolute bottom-4 right-4 bg-cvat-surface/80 border border-cvat-border rounded px-2 py-1 text-[10px] text-cvat-muted font-mono">
         {Math.round(scale * 100)}%

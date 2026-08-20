@@ -98,6 +98,16 @@ def save_annotations(image_id: int, items: list[AnnotationIn], db: Session = Dep
     return {"ok": True, "status": img.status}
 
 
+@router.delete("/api/projects/{project_id}/annotations")
+def delete_all_project_annotations(project_id: int, db: Session = Depends(get_db)):
+    images = db.query(Image).filter(Image.project_id == project_id).all()
+    for img in images:
+        db.query(Annotation).filter(Annotation.image_id == img.id).delete()
+        img.status = "pending"
+    db.commit()
+    return {"ok": True}
+
+
 @router.patch("/api/images/{image_id}/status")
 def update_status(image_id: int, status: str, db: Session = Depends(get_db)):
     img = db.query(Image).filter(Image.id == image_id).first()

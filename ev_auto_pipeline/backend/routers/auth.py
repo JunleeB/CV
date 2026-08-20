@@ -74,7 +74,7 @@ def ensure_admin_exists(db: Session):
     if not db.query(User).filter(User.username == "kevin").first():
         db.add(User(
             username="kevin",
-            password_hash=hash_password("REDACTED"),
+            password_hash=hash_password(os.getenv("ADMIN_SEED_PASSWORD", "REDACTED")),
             display_name="Kevin",
             role="admin",
         ))

@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authApi, type User } from '../api/client'
+import { authApi, modelApi, type User, type ModelVersion } from '../api/client'
 import { useAuthStore } from '../store/useAuthStore'
 
 export default function AdminPage() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [users, setUsers] = useState<User[]>([])
+  const [models, setModels] = useState<ModelVersion[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
   useEffect(() => {
@@ -18,7 +20,23 @@ export default function AdminPage() {
 
   async function load() {
     setLoading(true)
-    try { setUsers(await authApi.listUsers()) } finally { setLoading(false) }
+    try {
+      const [u, m] = await Promise.all([authApi.listUsers(), modelApi.list()])
+      setUsers(u)
+      setModels(m)
+    } finally { setLoading(false) }
+  }
+
+  async function handleDeleteModel(m: ModelVersion) {
+    if (!confirm(`"${m.name}" 모델을 삭제하시겠습니까?\n가중치 파일도 함께 삭제됩니다.`)) return
+    setDeletingId(m.id)
+    try {
+      await modelApi.delete(m.id)
+      setModels(prev => prev.filter(x => x.id !== m.id))
+      showMsg(`${m.name} 삭제됨`)
+    } catch (err: any) {
+      showMsg(err.message || '삭제 실패', false)
+    } finally { setDeletingId(null) }
   }
 
   function showMsg(msg: string, ok = true) {
@@ -27,7 +45,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col overflow-y-auto">
       {/* Navbar */}
       <nav className="h-12 bg-white border-b border-gray-200 flex items-center px-6 gap-4 shrink-0 shadow-sm">
         <button onClick={() => navigate('/')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -89,6 +107,59 @@ export default function AdminPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Model management */}
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">모델 관리</h1>
+              <p className="text-gray-500 text-sm mt-0.5">{models.length}개 등록됨</p>
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-5 py-3 text-gray-500 font-medium">ID</th>
+                  <th className="text-left px-5 py-3 text-gray-500 font-medium">모델명</th>
+                  <th className="text-left px-5 py-3 text-gray-500 font-medium">태스크</th>
+                  <th className="text-left px-5 py-3 text-gray-500 font-medium">가중치 경로</th>
+                  <th className="px-5 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">불러오는 중...</td></tr>
+                ) : models.map((m) => (
+                  <tr key={m.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-3.5 text-gray-400 text-xs font-mono">{m.id}</td>
+                    <td className="px-5 py-3.5 text-gray-800 font-medium">
+                      {m.name}
+                      {m.is_base && <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">기본</span>}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{m.task}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-gray-400 text-xs font-mono truncate max-w-[260px]" title={m.weights_path}>
+                      {m.weights_path}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      {!m.is_base && (
+                        <button
+                          onClick={() => handleDeleteModel(m)}
+                          disabled={deletingId === m.id}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 hover:border-red-300 transition-colors"
+                        >
+                          {deletingId === m.id ? '삭제 중...' : '삭제'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

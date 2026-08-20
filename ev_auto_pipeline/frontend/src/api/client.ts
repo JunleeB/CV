@@ -69,6 +69,8 @@ export const projectApi = {
   create: (body: { name: string; labels: { name: string; color: string; class_index: number }[]; source_path?: string; conf_threshold?: number }) =>
     req<Project>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
   delete: (id: number) => req(`/api/projects/${id}`, { method: 'DELETE' }),
+  rename: (id: number, name: string) =>
+    req(`/api/projects/${id}/name`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   updateRoi: (id: number, roi: number[] | null) =>
     req(`/api/projects/${id}/roi`, { method: 'PATCH', body: JSON.stringify({ roi }) }),
   setModel: (id: number, model_id: number | null) =>
@@ -102,6 +104,7 @@ export const imageApi = {
     return req<{ items: ImageItem[]; total: number }>(`/api/projects/${projectId}/images?${q}`)
   },
   url: (imageId: number) => `/images/${imageId}/file`,
+  thumbUrl: (imageId: number) => `/images/${imageId}/thumb`,
 }
 
 // ─── Annotations ──────────────────────────────────────────────────────────────
@@ -111,6 +114,8 @@ export const annotationApi = {
     req<{ ok: boolean; status: string }>(`/api/images/${imageId}/annotations`, { method: 'PUT', body: JSON.stringify(items) }),
   setStatus: (imageId: number, status: string) =>
     req(`/api/images/${imageId}/status?status=${status}`, { method: 'PATCH' }),
+  deleteAllForProject: (projectId: number) =>
+    req(`/api/projects/${projectId}/annotations`, { method: 'DELETE' }),
   samBbox: (imageId: number, bbox: number[]) =>
     req<{ polygon: number[] }>(`/api/images/${imageId}/sam-bbox`, { method: 'POST', body: JSON.stringify({ bbox }) }),
   samPoints: (imageId: number, points: number[][], point_labels: number[]) =>

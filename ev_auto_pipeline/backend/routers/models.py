@@ -404,10 +404,16 @@ def _run_finetune(
                 lbl_path = new_lbl_dir / (Path(item["filename"]).stem + ".txt")
                 lbl_path.write_text("\n".join(lines))
 
-        # 3. 기존 데이터 replay 샘플링 (클래스 비율 유지: dog 50% 보장)
+        # 3. 기존 데이터 replay 샘플링 — EV 파인튜닝 모델일 때만 적용
+        # raw YOLO 모델(yolo11l.pt 등)은 절대경로가 아니므로 제외
+        is_ev_model = (
+            base_weights == ORIGINAL_WEIGHTS
+            or str(MODELS_DIR) in base_weights
+            or str(BASE_DIR / "runs") in base_weights
+        )
         orig_img_dir = ORIGINAL_DATASET / "images" / "train"
         orig_lbl_dir = ORIGINAL_DATASET / "labels" / "train"
-        if orig_img_dir.exists() and orig_lbl_dir.exists():
+        if is_ev_model and orig_img_dir.exists() and orig_lbl_dir.exists():
             all_orig = [p for p in orig_img_dir.iterdir()
                         if p.suffix.lower() in (".jpg", ".jpeg", ".png")]
             dog_orig, other_orig = [], []
@@ -511,7 +517,7 @@ def _serialize(m: ModelVersion) -> dict:
         "description": m.description,
         "is_base": m.is_base,
         "task": m.task or "segment",
-        "created_at": m.created_at.isoformat(),
+        "created_at": m.created_at.isoformat() if m.created_at else None,
     }
 
 

@@ -157,7 +157,7 @@ function RoiSetupModal({ project, imageId, onClose, onConfirm }: {
     if (!imageId) return
     const img = new Image()
     img.onload = () => { imgRef.current = img; setImgLoaded(true) }
-    img.src = imageApi.url(imageId)
+    img.src = imageApi.thumbUrl(imageId)
   }, [imageId])
 
   useEffect(() => { if (imgLoaded) redraw() }, [imgLoaded])
@@ -291,211 +291,6 @@ function RoiSetupModal({ project, imageId, onClose, onConfirm }: {
   )
 }
 
-/* ── Fine-tune Modal ── */
-function FinetuneModal({ projectId, models, onClose, onDone }: {
-  projectId: number
-  models: ModelVersion[]
-  onClose: () => void
-  onDone: (newModelId: number) => void
-}) {
-  const [modelName, setModelName] = useState('')
-  const [baseModelId, setBaseModelId] = useState<number | ''>('')
-  const [task, setTask] = useState<'segment' | 'detect'>('segment')
-  const [epochs, setEpochs] = useState(50)
-  const [replay, setReplay] = useState(300)
-  const [jobId, setJobId] = useState<string | null>(null)
-  const [progress, setProgress] = useState(0)
-  const [total, setTotal] = useState(0)
-  const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [errorMsg, setErrorMsg] = useState('')
-  const wsRef = useRef<WebSocket | null>(null)
-
-  useEffect(() => {
-    if (!jobId) return
-    const ws = new WebSocket(`ws://${location.host}/ws/finetune/${jobId}`)
-    wsRef.current = ws
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data)
-      setProgress(data.progress ?? 0)
-      setTotal(data.total ?? 0)
-      setStatus(data.status)
-      if (data.status === 'done' && data.model_id) {
-        ws.close()
-        onDone(data.model_id)
-      }
-      if (data.status === 'error') {
-        setErrorMsg(data.error ?? '알 수 없는 오류')
-        ws.close()
-      }
-    }
-    return () => ws.close()
-  }, [jobId])
-
-  async function start() {
-    if (!modelName.trim()) return
-    setStatus('running')
-    try {
-      const res = await modelApi.finetune({
-        project_id: projectId,
-        model_name: modelName.trim(),
-        base_model_id: baseModelId !== '' ? baseModelId : undefined,
-        epochs,
-        replay_count: replay,
-        task,
-      })
-      setJobId(res.job_id)
-      setTotal(epochs)
-    } catch (err: any) {
-      setStatus('error')
-      setErrorMsg(err.message)
-    }
-  }
-
-  const pct = total > 0 ? Math.round((progress / total) * 100) : 0
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={status === 'idle' ? onClose : undefined}>
-      <div className="bg-cvat-surface rounded-xl shadow-2xl border border-cvat-border w-[460px]" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-cvat-border">
-          <h2 className="font-semibold text-cvat-text text-sm">파인튜닝 — 새 모델 생성</h2>
-          {status !== 'running' && (
-            <button onClick={onClose} className="text-cvat-muted hover:text-cvat-text transition-colors">✕</button>
-          )}
-        </div>
-
-        <div className="p-5 space-y-4">
-          {status === 'idle' && (
-            <>
-              <div>
-                <label className="block text-xs text-cvat-muted mb-1.5 font-medium">새 모델 이름 *</label>
-                <input
-                  value={modelName}
-                  onChange={e => setModelName(e.target.value)}
-                  placeholder="예: 대형견 파인튜닝 v1"
-                  autoFocus
-                  className="w-full bg-cvat-bg border border-cvat-border rounded-lg px-3 py-2 text-sm text-cvat-text placeholder-cvat-muted/40 focus:outline-none focus:border-cvat-gold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-cvat-muted mb-1.5 font-medium">어노테이션 타입</label>
-                <div className="flex gap-2">
-                  {(['segment', 'detect'] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTask(t)}
-                      className={`flex-1 py-2 text-xs rounded-lg border transition-colors font-medium ${
-                        task === t
-                          ? t === 'detect'
-                            ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
-                            : 'bg-blue-500/20 border-blue-500/50 text-blue-400'
-                          : 'bg-cvat-bg border-cvat-border text-cvat-muted hover:border-cvat-gold/40'
-                      }`}
-                    >
-                      {t === 'segment' ? '⬡ Segmentation (YOLO+SAM2)' : '▭ Detection (bbox only)'}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-cvat-muted mt-1.5">
-                  {task === 'detect'
-                    ? '불/연기 등 bbox 검출 모델 — SAM2 없이 사각형 영역만 생성'
-                    : '엘리베이터 등 폴리곤 세그멘테이션 모델 — YOLO+SAM2 파이프라인 유지'}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs text-cvat-muted mb-1.5 font-medium">베이스 모델</label>
-                <select
-                  value={baseModelId}
-                  onChange={e => setBaseModelId(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full bg-cvat-bg border border-cvat-border rounded-lg px-3 py-2 text-sm text-cvat-text focus:outline-none focus:border-cvat-gold"
-                >
-                  <option value="">기본 모델 (yolo11m_ev)</option>
-                  {models.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} [{m.task === 'detect' ? 'bbox' : 'seg'}]</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-cvat-muted mb-1.5 font-medium">
-                  학습 에폭: <span className="text-cvat-gold font-mono">{epochs}</span>
-                </label>
-                <input type="range" min={10} max={100} step={5} value={epochs}
-                  onChange={e => setEpochs(Number(e.target.value))}
-                  className="w-full accent-cvat-gold" />
-                <div className="flex justify-between text-[10px] text-cvat-muted mt-0.5">
-                  <span>10 (빠름)</span><span>100 (정확)</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-cvat-muted mb-1.5 font-medium">
-                  기존 데이터 replay: <span className="text-cvat-gold font-mono">{replay}장</span>
-                </label>
-                <input type="range" min={50} max={500} step={50} value={replay}
-                  onChange={e => setReplay(Number(e.target.value))}
-                  className="w-full accent-cvat-gold" />
-                <div className="flex justify-between text-[10px] text-cvat-muted mt-0.5">
-                  <span>50 (빠름)</span><span>500 (기존 능력 보존)</span>
-                </div>
-              </div>
-
-              <div className="bg-cvat-bg border border-cvat-border rounded-lg px-3 py-2.5 text-[11px] text-cvat-muted space-y-1">
-                <div>• 현재 프로젝트의 어노테이션 완료 이미지를 신규 데이터로 사용</div>
-                <div>• 기존 학습 데이터 {replay}장과 함께 학습 → 기존 능력 보존</div>
-                <div>• GPU #3 사용 (추론 GPU와 분리), 예상 소요: ~{Math.round(epochs * 0.1)}분</div>
-              </div>
-            </>
-          )}
-
-          {status === 'running' && (
-            <div className="py-4 space-y-4">
-              <div className="text-center text-sm text-cvat-text">학습 중... {progress}/{total} epoch</div>
-              <div className="h-2 bg-cvat-bg rounded-full overflow-hidden">
-                <div className="h-full bg-cvat-gold rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="text-center text-xs text-cvat-muted">{pct}% 완료</div>
-              <div className="text-[11px] text-cvat-muted text-center">창을 닫아도 백그라운드에서 계속 실행됩니다</div>
-            </div>
-          )}
-
-          {status === 'done' && (
-            <div className="py-4 text-center space-y-2">
-              <div className="text-green-400 text-sm font-medium">파인튜닝 완료!</div>
-              <div className="text-xs text-cvat-muted">새 모델이 이 프로젝트에 자동 적용되었습니다</div>
-            </div>
-          )}
-
-          {status === 'error' && (
-            <div className="py-2">
-              <div className="bg-red-900/30 border border-red-700/50 rounded-lg px-3 py-2.5 text-red-400 text-xs">{errorMsg}</div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-cvat-border">
-          {status === 'idle' && (
-            <>
-              <button onClick={onClose} className="text-cvat-muted hover:text-cvat-text text-xs px-4 py-2 border border-cvat-border rounded-lg transition-colors">취소</button>
-              <button onClick={start} disabled={!modelName.trim()}
-                className="bg-cvat-gold hover:bg-cvat-gold-h disabled:opacity-40 text-black font-semibold text-xs px-5 py-2 rounded-lg transition-colors">
-                파인튜닝 시작
-              </button>
-            </>
-          )}
-          {(status === 'done' || status === 'error') && (
-            <button onClick={onClose} className="bg-cvat-gold hover:bg-cvat-gold-h text-black font-semibold text-xs px-5 py-2 rounded-lg transition-colors">닫기</button>
-          )}
-          {status === 'running' && (
-            <button onClick={onClose} className="text-cvat-muted hover:text-cvat-text text-xs px-4 py-2 border border-cvat-border rounded-lg transition-colors">백그라운드로</button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function AnnotatorPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
@@ -529,7 +324,6 @@ export default function AnnotatorPage() {
   const [showRoiSetup, setShowRoiSetup] = useState(false)
   const pendingForce = useRef(false)
   const [models, setModels] = useState<ModelVersion[]>([])
-  const [showFinetune, setShowFinetune] = useState(false)
 
   const pid = Number(projectId)
 
@@ -549,17 +343,17 @@ export default function AnnotatorPage() {
     annotationApi.get(selectedImage.id).then((items) => store.setAnnotations(items))
   }, [selectedImage?.id])
 
-  // 인접 이미지 프리로드 — 앞뒤 3장씩 미리 브라우저 캐시에 올려둠
+  // 인접 이미지 프리로드 — 앞 3장 + 뒤 15장
   useEffect(() => {
     if (!selectedImage || imageList.length === 0) return
     const idx = imageList.findIndex((i) => i.id === selectedImage.id)
     if (idx === -1) return
-    // 현재 위치 기준 앞 1장 + 뒤 4장 미리 로드
-    ;[-1, 1, 2, 3, 4].forEach((delta) => {
+    const deltas = Array.from({ length: 19 }, (_, i) => i - 3).filter((d) => d !== 0)
+    deltas.forEach((delta) => {
       const adj = imageList[idx + delta]
       if (adj) {
         const img = new window.Image()
-        img.src = imageApi.url(adj.id)
+        img.src = imageApi.thumbUrl(adj.id)
       }
     })
   }, [selectedImage?.id, imageList])
@@ -698,11 +492,17 @@ export default function AnnotatorPage() {
     }
   }
 
-  async function handleRerunJob() {
-    if (!project || jobRunning) return
-    if (!window.confirm('기존 어노테이션을 전부 삭제하고 전체 재어노테이션 하시겠습니까?')) return
-    pendingForce.current = true
-    setShowRoiSetup(true)
+  async function handleDeleteAllAnnotations() {
+    if (!project) return
+    if (!window.confirm('프로젝트의 어노테이션을 전부 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+    try {
+      await annotationApi.deleteAllForProject(project.id)
+      showToast('어노테이션 전체 삭제 완료', 'success')
+      store.setAnnotations([])
+      setRefreshKey((k) => k + 1)
+    } catch (err: any) {
+      showToast(err.message, 'error')
+    }
   }
 
   async function handleTrackFromHere(maskMode = false) {
@@ -733,7 +533,7 @@ export default function AnnotatorPage() {
     pending:   { color: 'bg-gray-500/20 text-gray-400',   label: '대기' },
     annotated: { color: 'bg-green-500/20 text-green-400', label: '완료' },
     review:    { color: 'bg-yellow-500/20 text-yellow-400', label: '검토' },
-    done:      { color: 'bg-blue-500/20 text-blue-400',   label: '승인' },
+    done:      { color: 'bg-green-500/20 text-green-400',  label: '완료' },
   }
 
   return (
@@ -806,16 +606,6 @@ export default function AnnotatorPage() {
             </select>
           </div>
 
-          {/* Fine-tune button */}
-          <button
-            onClick={() => setShowFinetune(true)}
-            className="flex items-center gap-1.5 text-cvat-muted hover:text-cvat-text text-xs border border-cvat-border hover:border-cvat-gold/40 px-2.5 py-1.5 rounded-lg transition-colors"
-            title="현재 어노테이션으로 파인튜닝"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-            파인튜닝
-          </button>
-
           {/* Auto-annotate button */}
           <button
             onClick={handleRunJob}
@@ -826,15 +616,15 @@ export default function AnnotatorPage() {
             자동 어노테이션
           </button>
 
-          {/* Re-annotate button */}
+          {/* Delete all annotations button */}
           <button
-            onClick={handleRerunJob}
+            onClick={handleDeleteAllAnnotations}
             disabled={jobRunning}
             className="flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-            title="기존 어노테이션 전부 삭제 후 전체 재어노테이션"
+            title="프로젝트 어노테이션 전체 삭제"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            재어노테이션
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            전체 삭제
           </button>
 
           {/* SAM2 Video Track buttons */}
@@ -844,7 +634,7 @@ export default function AnnotatorPage() {
                 onClick={() => handleTrackFromHere(false)}
                 disabled={trackRunning || jobRunning}
                 className="flex items-center gap-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-400 text-xs px-2.5 py-1.5 rounded-l-lg transition-colors disabled:opacity-50"
-                title="SAM2 추적 — bbox 직사각형"
+                title="SAM2 추적 (bbox)"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 추적 (bbox)
@@ -853,7 +643,7 @@ export default function AnnotatorPage() {
                 onClick={() => handleTrackFromHere(true)}
                 disabled={trackRunning || jobRunning}
                 className="flex items-center gap-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 border-l-0 text-violet-400 text-xs px-2.5 py-1.5 rounded-r-lg transition-colors disabled:opacity-50"
-                title="SAM2 추적 — 마스크 polygon"
+                title="SAM2 추적 (mask)"
               >
                 추적 (mask)
               </button>
@@ -965,7 +755,7 @@ export default function AnnotatorPage() {
           {selectedImage ? (
             <AnnotationCanvas
               imageId={selectedImage.id}
-              imageUrl={imageApi.url(selectedImage.id)}
+              imageUrl={imageApi.thumbUrl(selectedImage.id)}
               labels={project?.labels ?? []}
               onSamError={(msg) => showToast(msg, 'error')}
             />
@@ -995,23 +785,6 @@ export default function AnnotatorPage() {
           )}
         </div>
       </div>
-
-      {/* Fine-tune Modal */}
-      {showFinetune && project && (
-        <FinetuneModal
-          projectId={project.id}
-          models={models}
-          onClose={() => setShowFinetune(false)}
-          onDone={async (newModelId) => {
-            const updated = await modelApi.list()
-            setModels(updated)
-            await projectApi.setModel(project.id, newModelId)
-            setProject(prev => prev ? { ...prev, model_id: newModelId } : prev)
-            setShowFinetune(false)
-            showToast('파인튜닝 완료! 새 모델이 적용되었습니다', 'success')
-          }}
-        />
-      )}
 
       {/* ROI Setup Modal */}
       {showRoiSetup && project && (

@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,7 +10,14 @@ from sqlalchemy.orm import Session
 from backend.database import init_db, get_db, Image, engine
 from backend import inference as inf
 from sqlalchemy import text
-from backend.routers import projects, images, annotations, jobs, auth, models as models_router
+from backend.routers import (
+    projects,
+    images,
+    annotations,
+    jobs,
+    auth,
+    models as models_router,
+)
 from backend.routers.auth import ensure_admin_exists
 from backend.routers.models import ensure_base_model
 from backend.database import SessionLocal
@@ -44,8 +50,10 @@ async def lifespan(app: FastAPI):
     try:
         inf.load_models()
         print("모델 로딩 완료 (YOLO + SAM2)")
-    except Exception as e:
-        print(f"[경고] 모델 로딩 실패 — 추론 기능 비활성화: {e}")
+    except Exception:
+        import traceback
+
+        print(f"[경고] 모델 로딩 실패 — 추론 기능 비활성화:\n{traceback.format_exc()}")
     yield
 
 
@@ -70,6 +78,7 @@ app.include_router(models_router.router)
 def public_preview(db: Session = Depends(get_db)):
     """인증 없이 로그인 화면에서 사용할 어노테이션된 이미지 ID 3개 반환."""
     import random
+
     imgs = db.query(Image).filter(Image.status.in_(["annotated", "done"])).all()
     sample = random.sample(imgs, min(3, len(imgs))) if imgs else []
     return [{"id": img.id, "filename": img.filename} for img in sample]
@@ -79,10 +88,12 @@ def public_preview(db: Session = Depends(get_db)):
 def public_image(image_id: int, db: Session = Depends(get_db)):
     """인증 없이 이미지 파일 서빙 (로그인 페이지 미리보기용)."""
     from fastapi import HTTPException
+
     img = db.query(Image).filter(Image.id == image_id).first()
     if not img or not Path(img.rel_path).exists():
         raise HTTPException(status_code=404)
     return FileResponse(img.rel_path, media_type="image/jpeg")
+
 
 # Serve frontend (CDN-based, no build step)
 if STATIC_DIR.exists():
@@ -97,7 +108,12 @@ if STATIC_DIR.exists():
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         # Don't intercept API or image routes
-        if full_path.startswith("api/") or full_path.startswith("images/") or full_path.startswith("ws/"):
+        if (
+            full_path.startswith("api/")
+            or full_path.startswith("images/")
+            or full_path.startswith("ws/")
+        ):
             from fastapi import HTTPException
+
             raise HTTPException(status_code=404)
         return FileResponse(str(STATIC_DIR / "index.html"))

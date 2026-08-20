@@ -136,6 +136,7 @@ export default function ProjectsPage() {
                 onOpen={() => navigate(`/projects/${p.id}`)}
                 onDelete={() => handleDelete(p.id, p.name)}
                 onExport={() => setExportTarget(p)}
+                onRenamed={(name) => setProjects((prev) => prev.map((x) => x.id === p.id ? { ...x, name } : x))}
               />
             ))}
           </div>
@@ -225,21 +226,46 @@ export default function ProjectsPage() {
 
 /* ── Project Row (CVAT-style) ── */
 function ProjectRow({
-  project, onOpen, onDelete, onExport
+  project, onOpen, onDelete, onExport, onRenamed
 }: {
   project: Project
   onOpen: () => void
   onDelete: () => void
   onExport: () => void
+  onRenamed: (name: string) => void
 }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [nameInput, setNameInput] = useState(project.name)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     imageApi.list(project.id, { page: 0, page_size: 1 }).then((res) => {
       if (res.items.length > 0) setThumbUrl(imageApi.url(res.items[0].id))
     }).catch(() => {})
   }, [project.id])
+
+  useEffect(() => { setNameInput(project.name) }, [project.name])
+
+  async function saveRename() {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === project.name) {
+      setNameInput(project.name)
+      setRenaming(false)
+      return
+    }
+    setSaving(true)
+    try {
+      await projectApi.rename(project.id, trimmed)
+      onRenamed(trimmed)
+      setRenaming(false)
+    } catch {
+      alert('이름 변경에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const total = project.image_count ?? 0
   const annotated = project.annotated_count ?? 0
@@ -268,10 +294,26 @@ function ProjectRow({
       </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0 py-3 cursor-pointer" onClick={onOpen}>
+      <div className={`flex-1 min-w-0 py-3 ${renaming ? '' : 'cursor-pointer'}`} onClick={renaming ? undefined : onOpen}>
         <div className="flex items-baseline gap-2 mb-0.5">
           <span className="text-gray-400 text-xs font-mono">#{project.id}</span>
-          <span className="text-gray-900 font-semibold text-sm truncate">{project.name}</span>
+          {renaming ? (
+            <input
+              autoFocus
+              value={nameInput}
+              disabled={saving}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveRename()
+                if (e.key === 'Escape') { setNameInput(project.name); setRenaming(false) }
+              }}
+              onBlur={saveRename}
+              className="text-gray-900 font-semibold text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0 flex-1"
+            />
+          ) : (
+            <span className="text-gray-900 font-semibold text-sm truncate">{project.name}</span>
+          )}
         </div>
         <div className="text-gray-400 text-xs mb-2 flex items-center gap-2">
           <span>Created {new Date(project.created_at).toLocaleDateString('ko-KR')}</span>
@@ -338,6 +380,10 @@ function ProjectRow({
                 <button onClick={() => { setMenuOpen(false); onOpen() }}
                   className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
                   열기
+                </button>
+                <button onClick={() => { setMenuOpen(false); setNameInput(project.name); setRenaming(true) }}
+                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                  이름 변경
                 </button>
 <button onClick={() => { setMenuOpen(false); onExport() }}
                   className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">

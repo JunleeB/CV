@@ -2,16 +2,19 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, Boolean,
     DateTime, ForeignKey, Text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
+load_dotenv()
+
 # PostgreSQL 우선, 없으면 SQLite fallback
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://evuser:REDACTED@localhost:5432/annotation"
+    "postgresql://evuser:changeme@localhost:5432/annotation"
 )
 
 # SQLite URL이면 connect_args 추가 필요

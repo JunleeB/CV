@@ -10,10 +10,6 @@ const TOOLS: { id: Tool; label: string; key: string; icon: React.ReactNode }[] =
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="1.5" strokeWidth={1.5} /></svg>,
   },
   {
-    id: 'polygon', key: 'P', label: '폴리곤',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3l8 5v8l-8 5-8-5V8l8-5z" /></svg>,
-  },
-  {
     id: 'sam_point', key: 'S', label: 'SAM 포인트',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="3" strokeWidth={1.5} />

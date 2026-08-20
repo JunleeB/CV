@@ -18,22 +18,15 @@ runs/
 *.onnx
 *.torchscript
 
-# 데이터셋 (data.yaml만 남기고 이미지/라벨 제외)
-datasets/fire_smoke/train/
-datasets/fire_smoke/valid/
-datasets/fire_smoke/test/
-datasets/real_fire_smoke_v3/train/
-datasets/real_fire_smoke_v3/valid/
-datasets/cctv_fire_synth/train/
-datasets/cctv_fire_synth/valid/
-datasets/firesmoke_real/
-datasets/training_real/
-datasets/cctv_fire_test/
-datasets/*.zip
-
-# 업로드된 이미지
-uploads/
+# 데이터셋 전체 (핵심 툴 코드만 관리 — 실험용 데이터셋 제외)
+datasets/
 dataset/
+fall_dataset_raw/
+thumbs/
+datasets_saved/
+
+# 업로드된 이미지 / 산출물
+uploads/
 output/
 output_*/
 test_output/
@@ -44,7 +37,6 @@ mirror_preview/
 annotation.db
 pgdata/
 backups/
-datasets_saved/
 
 # 로그 / 임시
 logs/
@@ -59,6 +51,7 @@ backend/static/
 # 환경 변수
 .env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -70,10 +63,36 @@ backend/static/
 .DS_Store
 Thumbs.db
 
-# 민감 파일
+# 민감 파일 / 포트폴리오 문서
 *.pptx
-debug_*.py
-find_mirror_zone.py
-auto_label.py
-test_label.py
-train.py
+
+# fire/smoke 실험 (별도 사이드 프로젝트 — 핵심 툴 범위 밖)
+train_fire_smoke.py
+train_fire_smoke.sh
+generate_cctv_fire_data.py
+make_fire_compare.py
+debug_gdino.py
+fire_compare.png
+
+# crack(dacl10k) 실험
+convert_dacl10k.py
+merge_crack_datasets.py
+crack_binary.yaml
+auto_crack_pipeline.sh
+
+# fall detection 실험
+crop_fall_dataset.py
+prepare_fall_dataset.py
+extract_pose_features.py
+test_pose_feasibility.py
+train_fall_classifier.py
+fall_label_tool.py
+
+# 트래킹 비교 실험 이미지
+tracking_before.png
+tracking_after.png
+tracking_compare.png
+make_tracking_compare.py
+
+# 실험 결과 문서 (fire/smoke, crack phase 리포트)
+docs/

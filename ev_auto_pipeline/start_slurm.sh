@@ -1,15 +1,28 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+#SBATCH --job-name=ev_annotator
+#SBATCH --nodelist=gpu-106
+#SBATCH --gres=gpu:A6000:2
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=INFINITE
+#SBATCH --output=/home1/junlee/ev_auto_pipeline/logs/slurm_%j.out
+#SBATCH --error=/home1/junlee/ev_auto_pipeline/logs/slurm_%j.err
+
+cd /home1/junlee/ev_auto_pipeline
+
 set -a
 [ -f .env ] && source .env
 set +a
-export CUDA_VISIBLE_DEVICES=1,2,4,7   # cuda:0=GPU1(추론), cuda:1=GPU2(GDINO)
-# INFERENCE_DEVICE=cuda:0  # 기본값, 변경 필요시 주석 해제
-# GDINO_CUDA_DEVICE=cuda:1  # 기본값, 변경 필요시 주석 해제
-
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-changeme}"
 PGADMIN_EMAIL="${PGADMIN_EMAIL:-admin@example.com}"
 PGADMIN_PASSWORD="${PGADMIN_PASSWORD:-changeme}"
+
+# SLURM이 CUDA_VISIBLE_DEVICES를 자동 설정
+# inference.py: cuda:0 = YOLO+SAM2 추론, cuda:1 = Grounding DINO
+
+echo "[$(date)] Job $SLURM_JOB_ID started on $SLURMD_NODENAME"
+echo "  CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+echo "  NUM_INFERENCE_WORKERS=$NUM_INFERENCE_WORKERS"
 
 # PostgreSQL 컨테이너 시작
 if ! docker ps | grep -q ev_postgres; then
@@ -25,7 +38,7 @@ if ! docker ps | grep -q ev_postgres; then
   sleep 3
 fi
 
-# pgAdmin 시작 (DB 관리 웹 UI)
+# pgAdmin 시작
 if ! docker ps | grep -q ev_pgadmin; then
   docker start ev_pgadmin 2>/dev/null || \
   docker run -d --name ev_pgadmin \
@@ -37,4 +50,4 @@ if ! docker ps | grep -q ev_pgadmin; then
 fi
 
 echo "Starting EV Annotator on http://192.168.110.106:8010"
-venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8010 --reload
+venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8010

@@ -4,7 +4,6 @@ interface Format {
   id: string
   label: string
   desc: string
-  supportsMode: boolean
 }
 
 const FORMATS: Format[] = [
@@ -12,31 +11,26 @@ const FORMATS: Format[] = [
     id: 'yolo_seg',
     label: 'YOLO Segmentation 1.0',
     desc: 'Ultralytics YOLO — 폴리곤 세그먼테이션 (class x1 y1 x2 y2 ...)',
-    supportsMode: true,
   },
   {
     id: 'yolo_det',
     label: 'YOLO Detection 1.0',
     desc: 'Ultralytics YOLO — 바운딩박스 (class cx cy w h)',
-    supportsMode: true,
   },
   {
     id: 'coco',
     label: 'COCO 1.0',
     desc: 'MS COCO JSON — segmentation + bbox + categories',
-    supportsMode: false,
   },
   {
     id: 'voc',
     label: 'Pascal VOC 1.1',
     desc: 'Pascal VOC XML — 이미지별 bndbox XML',
-    supportsMode: false,
   },
   {
     id: 'csv',
     label: 'CSV 1.0',
     desc: '단순 CSV — filename, label, polygon, confidence',
-    supportsMode: false,
   },
 ]
 
@@ -46,47 +40,26 @@ interface Props {
   onClose: () => void
 }
 
-type Mode = 'server' | 'cvat'
-
-const MODE_INFO: Record<Mode, { label: string; badge: string; detail: string; color: string }> = {
-  server: {
-    label: '서버 학습용',
-    badge: 'SERVER',
-    detail: '이미지 경로만 포함 (이미지 미포함) — 동일 서버에서 바로 학습 가능',
-    color: 'blue',
-  },
-  cvat: {
-    label: 'CVAT 호환 (이식 가능)',
-    badge: 'PORTABLE',
-    detail: '이미지 파일 포함 + 상대 경로 — 다른 머신/서버에서도 바로 사용 가능',
-    color: 'green',
-  },
-}
-
 export default function ExportModal({ projectId, projectName, onClose }: Props) {
   const [selected, setSelected] = useState('yolo_seg')
-  const [mode, setMode] = useState<Mode>('server')
+  const [includeImages, setIncludeImages] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  const fmt = FORMATS.find((f) => f.id === selected)!
-  const showMode = fmt.supportsMode
 
   async function handleExport() {
     setLoading(true)
     try {
       const token = localStorage.getItem('access_token') ?? ''
-      const modeParam = showMode ? `&mode=${mode}` : ''
-      const res = await fetch(`/api/projects/${projectId}/export?format=${selected}${modeParam}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `/api/projects/${projectId}/export?format=${selected}&include_images=${includeImages}`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+      )
       if (!res.ok) throw new Error('Export 실패')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const modeSuffix = showMode ? `_${mode}` : ''
-      a.download = `${projectName}_${selected}${modeSuffix}.zip`
+      const imgSuffix = includeImages ? '_with_images' : ''
+      a.download = `${projectName}_${selected}${imgSuffix}.zip`
       a.click()
       URL.revokeObjectURL(url)
       onClose()
@@ -147,42 +120,29 @@ export default function ExportModal({ projectId, projectName, onClose }: Props) 
             </div>
           </div>
 
-          {/* Mode selector — YOLO only */}
-          {showMode && (
+          {/* Save images toggle */}
+          <div className="flex items-center justify-between py-1">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-2">Export 방식</label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['server', 'cvat'] as Mode[]).map((m) => {
-                  const info = MODE_INFO[m]
-                  const active = mode === m
-                  const border = active
-                    ? m === 'server' ? 'border-blue-500 bg-blue-50' : 'border-green-500 bg-green-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                  return (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      className={`border-2 rounded-lg p-3 text-left transition-colors ${border}`}
-                    >
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          m === 'server'
-                            ? active ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
-                            : active ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
-                        }`}>
-                          {info.badge}
-                        </span>
-                      </div>
-                      <p className={`text-xs font-semibold ${active ? (m === 'server' ? 'text-blue-700' : 'text-green-700') : 'text-gray-700'}`}>
-                        {info.label}
-                      </p>
-                      <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{info.detail}</p>
-                    </button>
-                  )
-                })}
-              </div>
+              <p className="text-sm font-medium text-gray-800">이미지 포함</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {includeImages
+                  ? '이미지 파일 포함 — 다른 머신/서버에서도 바로 사용 가능'
+                  : '라벨만 포함 (이미지 미포함) — 동일 서버에서 바로 학습 가능'}
+              </p>
             </div>
-          )}
+            <button
+              onClick={() => setIncludeImages((v) => !v)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                includeImages ? 'bg-blue-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
+                  includeImages ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
 
         </div>
 

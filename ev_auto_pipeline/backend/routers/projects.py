@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -203,6 +204,13 @@ async def upload_folder(project_id: int, file: UploadFile = File(...), db: Sessi
     return {"image_count": image_count}
 
 
+def _frame_prefix(project_name: str) -> str:
+    """프로젝트 이름을 파일명으로 쓸 수 있게 정리 (경로 구분자 등 파일명에 쓸 수 없는 문자만 치환)."""
+    safe = re.sub(r"[^\w.-]+", "_", project_name.strip())
+    safe = safe.strip("_.")
+    return safe or "frame"
+
+
 def _ts_to_sec(t: str) -> float:
     parts = t.strip().split(":")
     s = 0.0
@@ -240,17 +248,17 @@ def _build_ffmpeg_cmd(tmp_path: str, dest_pattern: str, start_time: str, end_tim
     return base(hwaccel=(probe.returncode == 0))
 
 
-def _run_video_extraction(project_id: int, tmp_path: str, dest: Path,
+def _run_video_extraction(project_id: int, tmp_path: str, dest: Path, prefix: str,
                           start_time: str, end_time: str, fps: float, next_num: int):
     """백그라운드 스레드에서 ffmpeg 실행 후 DB 등록."""
     try:
-        out_pattern = str(dest / f"frame_{next_num:06d}_%04d.jpg")
+        out_pattern = str(dest / f"{prefix}_{next_num:06d}_%04d.jpg")
         cmd = _build_ffmpeg_cmd(tmp_path, out_pattern, start_time, end_time, fps)
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             return  # 실패 시 조용히 종료 (이미 프로젝트는 생성됨)
 
-        new_frames = sorted(dest.glob(f"frame_{next_num:06d}_*.jpg"))
+        new_frames = sorted(dest.glob(f"{prefix}_{next_num:06d}_*.jpg"))
         db = SessionLocal()
         try:
             project = db.query(Project).filter(Project.id == project_id).first()
@@ -294,18 +302,21 @@ async def upload_video(
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    existing = sorted(dest.glob("frame_*.jpg"))
+    prefix = _frame_prefix(project.name)
+    existing = sorted(dest.glob(f"{prefix}_*.jpg"))
     next_num = 0
     if existing:
-        try:
-            next_num = max(int(p.stem.split("_")[1]) for p in existing) + 1
-        except Exception:
-            next_num = len(existing)
+        nums = []
+        for p in existing:
+            m = re.match(rf"^{re.escape(prefix)}_(\d+)_\d+$", p.stem)
+            if m:
+                nums.append(int(m.group(1)))
+        next_num = (max(nums) + 1) if nums else len(existing)
 
     # 백그라운드 스레드 시작 — 즉시 응답 반환
     t = threading.Thread(
         target=_run_video_extraction,
-        args=(project_id, tmp_path, dest, start_time, end_time, fps, next_num),
+        args=(project_id, tmp_path, dest, prefix, start_time, end_time, fps, next_num),
         daemon=True,
     )
     t.start()
@@ -336,6 +347,23 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
         "pending_count": pending,
         "labels": [{"id": l.id, "name": l.name, "color": l.color, "class_index": l.class_index} for l in project.labels],
     }
+
+
+class ProjectRename(BaseModel):
+    name: str
+
+
+@router.patch("/{project_id}/name")
+def rename_project(project_id: int, body: ProjectRename, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="프로젝트 이름을 입력해주세요.")
+    project.name = name
+    db.commit()
+    return {"ok": True, "name": project.name}
 
 
 class ModelSelect(BaseModel):
@@ -412,15 +440,15 @@ def _get_image_size(rel_path: str):
     return None, None
 
 
-def _write_yolo_meta(zf, project, image_paths: list, task: str = "detect", mode: str = "server"):
+def _write_yolo_meta(zf, project, image_paths: list, task: str = "detect", include_images: bool = False):
     """data.yaml + train.txt 생성
-    mode='cvat'   : CVAT Ultralytics YOLO 1.0 호환, 상대경로 images/train/filename
-    mode='server' : 서버 절대경로, 바로 학습 가능
+    include_images=True  : 상대경로 images/train/filename (이식 가능)
+    include_images=False : 서버 절대경로, 바로 학습 가능
     """
     sorted_labels = sorted(project.labels, key=lambda x: x.class_index)
     names_block = "\n".join(f"  {l.class_index}: {l.name}" for l in sorted_labels)
 
-    if mode == "cvat":
+    if include_images:
         yaml_content = f"names:\n{names_block}\npath: .\ntrain: train.txt\n"
         train_lines = [f"images/train/{Path(p).name}" for p in image_paths]
     else:
@@ -446,10 +474,10 @@ def _poly_to_bbox_norm(poly: list[float]):
 
 
 @router.post("/{project_id}/export")
-def export_labels(project_id: int, format: str = "yolo_seg", mode: str = "server", db: Session = Depends(get_db)):
+def export_labels(project_id: int, format: str = "yolo_seg", include_images: bool = False, db: Session = Depends(get_db)):
     """
-    mode='server' : 서버 절대경로 (이미지 미포함) — 동일 서버에서 바로 학습
-    mode='cvat'   : CVAT 호환 상대경로 + 이미지 포함 — 다른 머신에서도 사용 가능
+    include_images=false : 라벨만 (서버 절대경로) — 동일 서버에서 바로 학습
+    include_images=true  : 이미지 + 라벨 (상대경로) — 다른 머신/서버에서도 사용 가능
     """
     import io, zipfile as zf_module, json as _json
     from fastapi.responses import StreamingResponse
@@ -463,8 +491,7 @@ def export_labels(project_id: int, format: str = "yolo_seg", mode: str = "server
     buf = io.BytesIO()
 
     def _add_image_to_zip(zf, img):
-        """CVAT 모드: 실제 이미지 파일을 images/train/ 에 포함"""
-        if mode != "cvat":
+        if not include_images:
             return
         src = Path(img.rel_path)
         if src.exists():
@@ -488,10 +515,10 @@ def export_labels(project_id: int, format: str = "yolo_seg", mode: str = "server
                     coords = " ".join(f"{v:.6f}" for v in poly)
                     lines.append(f"{cls} {coords}")
                 if lines:
-                    zf.writestr(f"labels/{Path(img.filename).stem}.txt", "\n".join(lines))
+                    zf.writestr(f"labels/train/{Path(img.filename).stem}.txt", "\n".join(lines))
                     annotated_imgs.append(img.rel_path)
                     _add_image_to_zip(zf, img)
-            _write_yolo_meta(zf, project, annotated_imgs, task="segment", mode=mode)
+            _write_yolo_meta(zf, project, annotated_imgs, task="segment", include_images=include_images)
 
         # ── YOLO Detection (Ultralytics) ────────────────────────────────────
         elif format == "yolo_det":
@@ -509,10 +536,10 @@ def export_labels(project_id: int, format: str = "yolo_seg", mode: str = "server
                     cx, cy, w, h = _poly_to_bbox_norm(poly)
                     lines.append(f"{cls} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
                 if lines:
-                    zf.writestr(f"labels/{Path(img.filename).stem}.txt", "\n".join(lines))
+                    zf.writestr(f"labels/train/{Path(img.filename).stem}.txt", "\n".join(lines))
                     annotated_imgs.append(img.rel_path)
                     _add_image_to_zip(zf, img)
-            _write_yolo_meta(zf, project, annotated_imgs, task="detect", mode=mode)
+            _write_yolo_meta(zf, project, annotated_imgs, task="detect", include_images=include_images)
 
         # ── COCO JSON ───────────────────────────────────────────────────────
         elif format == "coco":
@@ -620,8 +647,8 @@ def export_labels(project_id: int, format: str = "yolo_seg", mode: str = "server
     buf.seek(0)
     from urllib.parse import quote as _quote
     fmt_suffix = {"yolo_seg": "yolo_seg", "yolo_det": "yolo_det", "coco": "coco", "voc": "voc", "csv": "csv"}.get(format, format)
-    mode_suffix = f"_{mode}" if mode in ("cvat", "server") and format in ("yolo_seg", "yolo_det") else ""
-    filename = f"{project.name}_{fmt_suffix}{mode_suffix}.zip"
+    img_suffix = "_with_images" if include_images and format in ("yolo_seg", "yolo_det") else ""
+    filename = f"{project.name}_{fmt_suffix}{img_suffix}.zip"
     encoded = _quote(filename, safe="")
     return StreamingResponse(
         buf,

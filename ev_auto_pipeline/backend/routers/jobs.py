@@ -135,6 +135,7 @@ _ws_clients: dict[str, list[WebSocket]] = {}
 class JobCreate(BaseModel):
     conf_threshold: Optional[float] = None
     force: bool = False  # True면 기존 어노테이션 삭제 후 전체 재처리
+    multi_scale: bool = False  # True면 640/1280/1920 multi-scale 탐지 (크랙 등 얇은 객체 recall 향상)
 
 
 @router.post("/api/projects/{project_id}/jobs")
@@ -187,7 +188,7 @@ def start_job(project_id: int, body: JobCreate = JobCreate(), db: Session = Depe
 
     thread = threading.Thread(
         target=_run_job,
-        args=(job_id, image_ids, labels, conf, roi, weights_path, model_task),
+        args=(job_id, image_ids, labels, conf, roi, weights_path, model_task, body.multi_scale),
         daemon=True,
     )
     thread.start()
@@ -231,12 +232,15 @@ async def job_ws(websocket: WebSocket, job_id: str):
 
 
 def _run_job(job_id: str, image_ids: list[int], labels: dict[int, int], conf: float,
-             roi: list | None = None, weights_path: str | None = None, model_task: str = "segment"):
+             roi: list | None = None, weights_path: str | None = None, model_task: str = "segment",
+             multi_scale: bool = False):
     db = SessionLocal()
     if model_task == "segment":
         infer_fn = inf.run_inference
     elif model_task == "gdino":
         infer_fn = inf.run_inference_gdino
+    elif model_task == "yolo_seg":
+        infer_fn = inf.run_inference_yolo_seg
     else:
         infer_fn = inf.run_inference_detect
 
@@ -248,7 +252,8 @@ def _run_job(job_id: str, image_ids: list[int], labels: dict[int, int], conf: fl
         images = db.query(Image).filter(Image.id.in_(image_ids)).order_by(Image.filename).all()
 
         for i, img in enumerate(images):
-            auto_labels, review_items = infer_fn(img.rel_path, conf_threshold=conf, roi=roi, weights_path=weights_path)
+            extra = {"multi_scale": multi_scale} if model_task == "segment" else {}
+            auto_labels, review_items = infer_fn(img.rel_path, conf_threshold=conf, roi=roi, weights_path=weights_path, **extra)
 
             # tracker 적용: GDINO 결과를 트래커에 넣고 최종 탐지 결정
             if tracker is not None:
