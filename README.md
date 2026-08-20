@@ -32,9 +32,10 @@ YOLO11 + SAM2 기반 자동 어노테이션 시스템을 여러 CCTV 도메인(�
 
 | 프로젝트 | 한 줄 요약 | 담당 역할 | 링크 |
 |---|---|---|---|
-| **CCTV 자동 어노테이션 시스템** (엘리베이터 제조사向) | YOLO11+SAM2 기반 수동 라벨링 자동화, 거울 반사 오탐을 ROI 지정 방식으로 해결 — mAP50 99.1% | 단독 개발 (기획·ML·Backend·Frontend) | [바로가기](docs/project_a_elevator.md) |
+| **CCTV 자동 어노테이션 시스템** (엘리베이터 제조사向) | YOLO11+SAM2 기반 수동 라벨링 자동화, 거울 반사 오탐을 ROI 지정 방식으로 해결 | 단독 개발 (기획·ML·Backend·Frontend) | [바로가기](docs/project_a_elevator.md) |
 | **CCTV 화재·연기 자동 어노테이션** (타이어 제조사向) | 학습/실환경 bbox 크기 불일치로 인한 도메인 갭 규명 → SAM2 Video Tracking 전환으로 소형 객체 탐지 해결 | 단독 개발 | [바로가기](docs/project_b_firesmoke.md) |
 | **CCTV 객체 위치 추론 파이프라인** (시니어 레지던스 AI 편의 서비스) | VLM 역할 분리 설계로 42,083건 위치분류 unknown 0건 달성 | GT 파이프라인 설계 및 VLM 통합 개발 | [바로가기](docs/project_c_vlm.md) |
+| **추론 최적화 & 검증셋 무결성** (엘리베이터 프로젝트 심화) | TensorRT 변환으로 추론 3.78배 가속, 그 과정에서 검증셋 데이터 누수를 발견해 실제 성능을 재검증 (mAP50-95(B) 0.94→0.84) | 단독 수행 | [바로가기](ev_auto_pipeline/README.md#추론-최적화--검증셋-무결성) |
 
 ### 사이드 프로젝트
 
