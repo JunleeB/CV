@@ -23,7 +23,7 @@ VLM에게 탐지 + 위치 분류 + bbox 생성을 동시에 요청했더니 다�
 
 | Before — VLM 단독 추론 (탐지+위치+bbox 동시 요청) | After — 역할 분리 (CVAT bbox + VLM 위치 분류만) |
 |:---:|:---:|
-| ![vlm-before](assets/vlm_after_role_separated.png) | ![vlm-after](assets/vlm_before_role_mixed.png) |
+| ![vlm-before](assets/vlm_before_role_mixed.png) | ![vlm-after](assets/vlm_after_role_separated.png) |
 
 같은 물건 주변에 라벨이 여러 개 겹쳐 붙던 문제(왼쪽)가, 역할 분리 후 단일 정확한 위치 분류(오른쪽)로 해결됐습니다.
 
