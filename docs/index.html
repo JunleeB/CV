@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>배준이 — AI Engineer Portfolio</title>
+<meta name="description" content="YOLO11 + SAM2 기반 CCTV 자동 어노테이션 파이프라인을 기획부터 서비스화까지 구현한 AI 엔지니어 포트폴리오">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <div class="nav-brand">배준이 (Bae Jun Lee)</div>
+    <div class="nav-links">
+      <a href="#projects">프로젝트</a>
+      <a href="https://github.com/JunleeB" target="_blank">GitHub</a>
+      <a href="mailto:junlee5985@naver.com">연락</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <div class="eyebrow">AI Engineer Portfolio</div>
+  <h1>컴퓨터 비전 파이프라인을<br>기획부터 서비스화까지</h1>
+  <p class="lede">
+    YOLO11 + SAM2 기반 자동 어노테이션 시스템을 여러 CCTV 도메인(엘리베이터, 화재·연기, 실내 객체 위치 추론)에
+    적용하며 데이터 수집·모델 학습·백엔드/프론트엔드 개발까지 엔드투엔드로 수행했습니다.
+  </p>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="num">3.78×</div><div class="label">TensorRT 추론 가속</div></div>
+    <div class="stat"><div class="num">42,083</div><div class="label">위치분류 unknown 0건</div></div>
+    <div class="stat"><div class="num">100%</div><div class="label">거울 반사 오탐 제거</div></div>
+    <div class="stat"><div class="num">5×</div><div class="label">수동 라벨링 대비 속도</div></div>
+  </div>
+</header>
+
+<section class="tight border-top wrap">
+  <h2>핵심 역량 & 스택</h2>
+  <div class="skill-row">
+    <div class="field">객체 탐지 / 세그멘테이션</div>
+    <div class="items">YOLO11, SAM2 (Meta), Grounding DINO (제로샷)</div>
+  </div>
+  <div class="skill-row">
+    <div class="field">VLM 파이프라인 설계</div>
+    <div class="items">Qwen3-VL 기반 역할 분리 파이프라인, 프롬프트/추론 최적화</div>
+  </div>
+  <div class="skill-row">
+    <div class="field">ML 인프라 / 학습</div>
+    <div class="items">PyTorch, Ultralytics, SLURM GPU 클러스터, TensorRT 추론 최적화</div>
+  </div>
+  <div class="badge-row">
+    <span class="badge">Python</span>
+    <span class="badge">PyTorch</span>
+    <span class="badge">FastAPI</span>
+    <span class="badge">React</span>
+    <span class="badge">PostgreSQL</span>
+    <span class="badge">정보처리기사</span>
+    <span class="badge">SQLD</span>
+  </div>
+</section>
+
+<section id="projects" class="border-top wrap">
+  <h2>대표 프로젝트</h2>
+  <p style="margin-top:-8px;margin-bottom:24px;">실제 CCTV 환경에 자동 어노테이션 파이프라인을 적용하며 겪은 문제와 해결 과정입니다. 계약 조건상 발주처명은 업종만 표기합니다.</p>
+
+  <div class="project-grid">
+    <a class="project-card" href="project_a_elevator.html">
+      <div class="tag">Project 01 · 엘리베이터 제조사向</div>
+      <h3>CCTV 자동 어노테이션 시스템</h3>
+      <p>YOLO11+SAM2 기반 수동 라벨링 자동화, 거울 반사 오탐을 ROI 지정 방식으로 해결</p>
+      <div class="meta">단독 개발 (기획 · ML · Backend · Frontend)</div>
+    </a>
+
+    <a class="project-card" href="optimization.html">
+      <div class="tag">Project 01-2 · 엘리베이터 프로젝트 심화</div>
+      <h3>추론 최적화 & 검증셋 무결성</h3>
+      <p>TensorRT 변환으로 추론 3.78배 가속, 그 과정에서 검증셋 데이터 누수를 발견해 실제 성능을 재검증</p>
+      <div class="meta">단독 수행 · mAP50-95(B) 0.94 → 0.84 정정</div>
+    </a>
+
+    <a class="project-card" href="project_b_firesmoke.html">
+      <div class="tag">Project 02 · 타이어 제조사向</div>
+      <h3>CCTV 화재·연기 자동 어노테이션</h3>
+      <p>학습/실환경 bbox 크기 불일치로 인한 도메인 갭 규명 → SAM2 Video Tracking 전환으로 소형 객체 탐지 해결</p>
+      <div class="meta">단독 개발</div>
+    </a>
+
+    <a class="project-card" href="project_c_vlm.html">
+      <div class="tag">Project 03 · 시니어 레지던스 AI 편의 서비스</div>
+      <h3>CCTV 객체 위치 추론 파이프라인</h3>
+      <p>VLM 역할 분리 설계로 42,083건 위치분류 unknown 0건 달성</p>
+      <div class="meta">GT 파이프라인 설계 및 VLM 통합 개발</div>
+    </a>
+
+    <a class="project-card" href="project_d_location_pipeline.html">
+      <div class="tag">Project 03-2 · 사내 R&D</div>
+      <h3>실내 홈캠 객체 위치 추론 파이프라인 고도화</h3>
+      <p>VLM → 규칙기반 엔진 → SAM2 트래킹으로 검수 오류 빈도 감소, Scene Graph Generation과 비교 실험</p>
+      <div class="meta">단독 개발 (규칙엔진 설계 · SAM2 트래킹 · REACT++ 비교)</div>
+    </a>
+  </div>
+
+  <h3 style="margin-top:48px;">사이드 프로젝트</h3>
+  <table>
+    <tr><th>프로젝트</th><th>한 줄 요약</th><th>역할</th></tr>
+    <tr><td>YOLO 낙상 감지 POC</td><td>카메라 실시간 낙상 이벤트 자동 감지</td><td>개인 개발</td></tr>
+    <tr><td>룸메이트 매칭 시스템</td><td>생활습관 설문 데이터 기반 궁합 예측 및 추천</td><td>데이터 전처리 및 추천 알고리즘 개발</td></tr>
+  </table>
+</section>
+
+<footer class="wrap">
+  <p>
+    <a href="mailto:junlee5985@naver.com">junlee5985@naver.com</a> ·
+    <a href="https://github.com/JunleeB" target="_blank">github.com/JunleeB</a>
+  </p>
+</footer>
+
+</body>
+</html>

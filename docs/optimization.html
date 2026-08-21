@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>추론 최적화 & 검증셋 무결성 — 배준이</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <div class="nav-brand">배준이 (Bae Jun Lee)</div>
+    <div class="nav-links">
+      <a href="index.html#projects">프로젝트</a>
+      <a href="https://github.com/JunleeB" target="_blank">GitHub</a>
+      <a href="mailto:junlee5985@naver.com">연락</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <a class="back-link" href="project_a_elevator.html">← 엘리베이터 프로젝트로 돌아가기</a>
+  <div class="eyebrow">Project 01-2 · 엘리베이터 프로젝트 심화</div>
+  <h1>추론 최적화 &<br>검증셋 무결성</h1>
+  <p class="lede">TensorRT 변환으로 추론 속도를 높이는 과정에서, 사용 중이던 검증셋 자체에 데이터 누수가 있다는 걸 발견하고 재구성했습니다.</p>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="num">3.78×</div><div class="label">9.90ms → 2.62ms</div></div>
+    <div class="stat"><div class="num">-10.4%p</div><div class="label">실제 mAP50-95(B) 정정폭</div></div>
+    <div class="stat"><div class="num">100%</div><div class="label">val 클립 train 중복률 (발견 당시)</div></div>
+    <div class="stat"><div class="num">2개</div><div class="label">직접 세우고 기각한 가설</div></div>
+  </div>
+</header>
+
+<section class="border-top wrap">
+  <h2><span class="num">01</span>결과 — TensorRT 이득 분해</h2>
+  <p>PyTorch → TensorRT FP16 전환으로 <strong>9.90ms → 2.62ms (3.78배)</strong> 가속을 확보했습니다. 여기서 그래프 최적화(레이어 퓨전 + 커널 오토튜닝)와 정밀도 절감(FP32→FP16) 각각의 기여도를 분리 측정한 게 핵심입니다 — TRT FP32 지점을 따로 재지 않으면 이 둘이 하나로 뭉개집니다.</p>
+
+  <img src="assets/latency_breakdown.png" alt="TensorRT 최적화 이득 분해 차트" style="margin:24px 0;">
+
+  <table>
+    <tr><th>설정</th><th class="num">latency</th><th class="num">mAP50-95(B)</th><th>채택</th></tr>
+    <tr class="highlight"><td>TRT FP16</td><td class="num">2.62ms</td><td class="num">0.8324</td><td><span class="chip yes">채택</span></td></tr>
+    <tr><td>TRT INT8</td><td class="num">2.24~2.49ms</td><td class="num">0.7998</td><td><span class="chip no">제외</span></td></tr>
+  </table>
+  <p style="font-size:13px;color:var(--text-faint);">※ mAP는 클린 홀드아웃(20,791장) 기준. INT8은 클린셋 기준 손실 3.26%p 대비 이득이 5~16% 범위로 불안정해 파이프라인에서 제외.</p>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">02</span>검증 과정에서 발견한 것 — 데이터 누수</h2>
+  <p>데이터셋 분할 스크립트가 클립(영상) 단위가 아니라 <strong>개별 프레임 단위</strong>로 무작위 분할되어 있었습니다. 같은 영상의 인접 프레임이 train/val에 걸쳐 배정되어, val 클립 238개 중 238개(100%)가 train에도 존재하는 완전한 누수였습니다.</p>
+
+  <div class="timeline">
+    <div class="tl-step">
+      <div class="tl-title">1. 데이터셋 분할 방식 확인</div>
+      <div class="tl-body">클립이 아닌 개별 프레임 단위로 무작위 분할되고 있음을 코드에서 확인</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">2. 파일명으로 육안 증거 확보</div>
+      <div class="tl-body">같은 클립의 인접 프레임이 train/val에 각각 배정됨을 실제 파일명으로 확인</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">3. 전수조사로 규모 확인</div>
+      <div class="tl-body">val 클립 238개 중 238개(100%)가 train에도 존재 — 일부가 아닌 전면적 누수</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">4. 실측으로 확정</div>
+      <div class="tl-body">NAS의 미학습 클립 352개(20,791장)로 홀드아웃을 재구성해 재학습 없이 재평가</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>지표</th><th class="num">leaky val</th><th class="num">클린 홀드아웃</th><th class="num">차이</th></tr>
+    <tr class="highlight"><td>mAP50-95(B)</td><td class="num">0.9408</td><td class="num">0.8366</td><td class="num" style="color:var(--bad);">-10.4%p</td></tr>
+    <tr><td>person</td><td class="num">0.983</td><td class="num">0.947</td><td class="num" style="color:var(--bad);">-3.6%p</td></tr>
+    <tr><td>dog</td><td class="num">0.898</td><td class="num">0.727</td><td class="num" style="color:var(--bad);">-17.1%p</td></tr>
+  </table>
+
+  <div class="result-box warn">
+    <h4>왜 중요한가</h4>
+    <ul>
+      <li>dog는 샘플 수·자세 다양성 부족으로 일반화 대신 암기에 의존했을 가능성이 큽니다 (-17.1%p, person 대비 5배 큰 하락폭)</li>
+      <li>누수된 검증셋은 INT8의 정확도 손실 폭도 약 3배 과소평가하고 있었습니다 (-1.13%p → 실제 -3.26%p) — 배포 결정 자체가 잘못된 근거 위에 있었을 뻔했습니다</li>
+    </ul>
+  </div>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">03</span>기각한 가설 두 개</h2>
+  <p>그럴듯한 설명을 세웠다가, 재검증해서 스스로 기각한 과정입니다. 이 부분을 포트폴리오에 남기는 사람은 거의 없지만, 검증 습관을 보여주는 가장 강한 근거라고 생각합니다.</p>
+
+  <div class="timeline">
+    <div class="tl-step rejected">
+      <div class="tl-title">가설 1 — "reformat 오버헤드가 원인이다"</div>
+      <div class="tl-body">
+        216개 레이어 중 45개(20.8%)가 순수 포맷 변환(Reformat)이었습니다. <code>--int8</code>만 켜서
+        선택지가 {INT8, FP32}뿐이라 이런 오버헤드가 생긴 것 아닌가 하여 <code>--int8 --fp16</code>을
+        같이 켜서 재빌드했습니다. 결과: 속도는 개선(2.49→2.26ms)됐지만 mAP가 소수점까지 완전히
+        동일했습니다. 레이어별 dtype을 재집계하니 float16 텐서가 두 빌드 모두 <strong>0개</strong> —
+        <code>--fp16</code> 플래그는 빌드 로그에 기록됐지만 실제로 어떤 레이어에도 적용되지 않았습니다.
+        <strong>가설 기각.</strong>
+      </div>
+    </div>
+    <div class="tl-step rejected">
+      <div class="tl-title">가설 2 — "그럼 속도차는 뭐였나"</div>
+      <div class="tl-body">
+        동일 설정(<code>--int8</code>만, <code>--fp16</code> 없이)으로 한 번 더 빌드해 재현성을
+        검증했습니다. v1(2.49ms)과 완전히 같은 설정인 v2가 2.24ms로 나왔습니다 — TensorRT 커널
+        오토튜닝의 <strong>빌드 간 변동성</strong>이었습니다. 공정성을 위해 FP16도 재빌드해 비교했더니
+        변동폭 1.5%(FP16) vs ~10%(INT8)로, 두 범위가 겹치지 않아 "INT8이 더 빠르다" 자체는
+        유지되지만 그 폭은 단일값이 아닌 범위로 표기하는 게 정확하다는 결론을 냈습니다.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">04</span>코드 — 재현 가능한 범용 스크립트</h2>
+  <p>실험 과정에서 쌓인 지식(dynamic ONNX 필수, task 메타데이터 유실, calibration 캐시는 배치별로 재사용 불가 등)을 CLI 스크립트로 정리했습니다. 특정 모델에 종속되지 않고 <code>--model</code>, <code>--data</code> 인자로 아무 YOLO 모델에나 바로 쓸 수 있습니다.</p>
+
+  <pre><code class="language-python">def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--onnx", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--precision", choices=["fp32", "fp16", "int8"], default="fp16")
+    ap.add_argument("--batch", type=int, default=1,
+                     help="고정 batch profile. ONNX가 dynamic batch로 "
+                          "export돼 있어야 함")
+    ap.add_argument("--calib-cache", default=None,
+                     help="다른 배치 크기로 재사용 시 그래프 최적화 경로가 "
+                          "달라져 빌드가 실패할 수 있음 - 배치별로 재보정할 것")
+    args = ap.parse_args()
+
+    shape = f"images:[{args.batch},3,640,640]"
+    cmd = ["polygraphy", "run", args.onnx, "--trt",
+           "--save-engine", args.out,
+           "--trt-min-shapes", shape, "--trt-opt-shapes", shape,
+           "--trt-max-shapes", shape]
+    if args.precision == "fp16":
+        cmd.append("--fp16")
+    elif args.precision == "int8":
+        cmd += ["--int8", "--data-loader-script", "calibration_loader.py"]
+        if args.calib_cache:
+            cmd += ["--calibration-cache", args.calib_cache]
+    subprocess.run(cmd, check=True)</code></pre>
+
+  <p style="font-size:13px;">전체 코드: <a href="https://github.com/JunleeB/CV/tree/main/ev_auto_pipeline/benchmark" target="_blank">ev_auto_pipeline/benchmark/</a> — export_onnx.py, build_engine.py, benchmark.py, evaluate.py, calibration_loader.py, check_split_leakage.py</p>
+</section>
+
+<footer class="wrap">
+  <p><a href="mailto:junlee5985@naver.com">junlee5985@naver.com</a> · <a href="https://github.com/JunleeB" target="_blank">github.com/JunleeB</a></p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+</body>
+</html>

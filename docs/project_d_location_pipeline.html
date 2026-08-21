@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>실내 홈캠 객체 위치 추론 파이프라인 고도화 — 배준이</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <div class="nav-brand">배준이 (Bae Jun Lee)</div>
+    <div class="nav-links">
+      <a href="index.html#projects">프로젝트</a>
+      <a href="https://github.com/JunleeB" target="_blank">GitHub</a>
+      <a href="mailto:junlee5985@naver.com">연락</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <a class="back-link" href="index.html">← 프로필로 돌아가기</a>
+  <div class="eyebrow">Project 03-2 · 사내 R&D</div>
+  <h1>실내 홈캠 객체 위치 추론<br>파이프라인 고도화</h1>
+  <p class="lede">VLM 위치추론의 비용·확장성 한계를 규칙기반 엔진 + SAM2 트래킹으로 돌파, Scene Graph Generation과 비교 실험까지</p>
+  <p style="font-size:14px;color:var(--text-faint);"><a href="project_c_vlm.html">CCTV 객체 위치 추론 프로젝트</a>(고객사 계약 건)와는 별개로 진행한 회사 자체 데이터 기반 내부 연구입니다.</p>
+</header>
+
+<section class="border-top wrap">
+  <h2><span class="num">01</span>배경 & 목표</h2>
+  <p>VLM 단독 추론은 프레임마다 API를 호출해야 해서, 처리할 영상이 늘어날수록 비용·시간도 그만큼 늘어나는 구조라 확장에 한계가 있었습니다. 이 한계를 규칙기반 엔진으로 돌파하고, 검수 파이프라인을 SAM2 비디오 트래킹으로 고도화한 뒤, 마지막으로 학습 기반 Scene Graph Generation(REACT++)과 비교해 규칙기반 접근의 위치를 가늠해봤습니다.</p>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">02</span>단계별 진행</h2>
+  <div class="timeline">
+    <div class="tl-step">
+      <div class="tl-title">1. VLM 기반 위치 GT 생성</div>
+      <div class="tl-body">Qwen3-VL을 vLLM으로 서빙해, bbox를 크롭해서 "이 물체가 어디 있나?"만 질문하는 방식으로 위치 GT 파일럿 구축. 소규모에서는 잘 동작했지만 프레임마다 API 호출이 필요해 비용·지연이 선형으로 증가.</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">2. 규칙기반 위치 판정 엔진</div>
+      <div class="tl-body">YOLO11-pose로 뽑은 사람 키포인트(코·눈·손목)와 물체 박스 사이의 기하학적 근접도, 가구 박스와의 포함관계만으로 위치를 판정. 판정 우선순위: 얼굴 근접 → 손목 근접 → 가구 포함관계 → 바닥. 호출 비용 0, 판정 근거 100% 역추적 가능. (이 로직은 회사 소유 IP라 소스코드는 비공개)</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">3. SAM2 시드-프레임 트래킹</div>
+      <div class="tl-body">프레임 독립 추론(YOLO)은 오분류·중복탐지·드리프트가 프레임 단위로 개별 발생. SAM2는 시드 프레임 1장의 정답을 기준으로 물체를 시간축으로 추적해 프레임 간 일관성을 높이고, 검수자가 수정해야 하는 빈도를 줄임.</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">4. REACT++ (Scene Graph Generation) 비교 실험</div>
+      <div class="tl-body">공개 오픈소스 <a href="https://github.com/Maelic/SGG-Benchmark" target="_blank">SGG-Benchmark</a>의 REACT++를 우리 데이터로 파인튜닝해, 규칙기반 접근과 학습 기반 SGG 접근의 트레이드오프를 실험적으로 비교. 코드 공개 (공개 프레임워크 기반이라 IP 문제 없음).</div>
+    </div>
+  </div>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">03</span>트러블슈팅</h2>
+  <div class="timeline">
+    <div class="tl-step">
+      <div class="tl-title">세그멘테이션 마스크 결손</div>
+      <div class="tl-body">사람이 소파에 앉으면 SAM2 마스크가 좌우로 갈라지는 문제 발생. 연결영역 병합 방식으로 처음 시도했으나 근본 원인(마스크 자체가 반쪽만 인식)과 달라 미해결. 최종적으로 고정 카메라 특성을 활용해 <strong>가구 박스는 SAM2 재추적 대신 시드프레임 박스를 구간 전체에 고정</strong>하는 방식으로 전환해 해결.</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">다중 검수자 동시쓰기로 인한 결과 파일 손상</div>
+      <div class="tl-body">검수자의 웹 저장과 배치 job의 파일 저장이 겹치며 JSON이 손상되는 문제를, 손상 파일 안의 서로 다른 부동소수점 정밀도를 단서로 원인을 특정하고, 임시파일 작성 후 원자적 교체(atomic rename) 방식으로 전환해 해결.</div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-title">누락 프레임으로 인한 배치 job 크래시</div>
+      <div class="tl-body">트래킹 대상 프레임 목록 구성 시 실제 파일 존재 여부를 먼저 검증하도록 방어 로직 추가.</div>
+    </div>
+  </div>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">04</span>REACT++ 비교 실험 — 코드</h2>
+  <p>VLM이 생성한 위치 GT를 SGG용 관계 트리플릿(subject, predicate, object)으로 변환하는 스크립트입니다. <code>on the sofa</code> → <code>(물체, on, sofa)</code>, <code>in hand</code> → <code>(물체, in hand, person)</code> 처럼 위치 문자열을 관계로 매핑합니다.</p>
+
+  <pre><code class="language-python">CLASSES = ["smartphone", "wallet", "eyeglasses", "white remote", "black remote",
+           "watch", "sofa", "table", "bed", "chair", "nightstand", "person"]
+PREDICATES = ["on", "in hand", "wearing"]
+
+LOC_MAP = {
+    "on the sofa": ("on", ["sofa"]),
+    "on the table": ("on", ["table"]),
+    "in hand": ("in hand", ["person"]),
+    "on the wrist": ("wearing", ["person"]),
+    "on the face": ("wearing", ["person"]),
+}
+
+def pick_furniture(obj_box, cands):
+    """지지 가구 선택: bottom-center 포함 > 교집합/객체면적 > 최근접."""
+    cx, by = (obj_box[0] + obj_box[2]) / 2, obj_box[3]
+    scored = []
+    for j, b in cands:
+        contains = b[0] &lt;= cx &lt;= b[2] and b[1] &lt;= by &lt;= b[3]
+        inter_ratio = intersection_area(obj_box, b) / area(obj_box)
+        dist = center_distance(obj_box, b)
+        scored.append((contains, inter_ratio, -dist, j))
+    scored.sort(reverse=True)
+    top = scored[0]
+    if not top[0] and top[1] &lt; 0.1:
+        return None  # 후보가 있어도 기하적으로 안 붙어있으면 포기
+    return top[3]</code></pre>
+  <p style="font-size:13px;">전체 코드: <a href="https://github.com/JunleeB/CV/tree/main/location_pipeline/react_pp_comparison" target="_blank">location_pipeline/react_pp_comparison/</a></p>
+</section>
+
+<section class="border-top wrap">
+  <h2><span class="num">05</span>성과 / 결론</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="num">0</div><div class="label">VLM 호출 비용</div></div>
+    <div class="stat"><div class="num">70%</div><div class="label">REACT++가 개선한 규칙기반 오류 케이스</div></div>
+  </div>
+
+  <table>
+    <tr><th>지표</th><th class="num">규칙기반 엔진</th><th class="num">REACT++ (SGG)</th></tr>
+    <tr><td>프레임 정확도</td><td class="num">0.826</td><td class="num">0.818</td></tr>
+    <tr><td>처리 속도</td><td class="num">30.9 fps</td><td class="num">23.4 fps</td></tr>
+  </table>
+
+  <div class="result-box">
+    <ul>
+      <li>VLM 호출 없이 규칙기반 엔진만으로 위치추론 (비용 0, 지연 없음, 판정 근거 설명 가능)</li>
+      <li>프레임 독립 추론(YOLO) 대비 시간축 추적(SAM2)으로 오류 빈도를 낮춰, 검수자가 실제로 고쳐야 하는 빈도를 줄임 (전체 확인 자체는 여전히 필요)</li>
+      <li>REACT++는 규칙기반이 확실히 틀렸던 케이스의 약 70%를 개선했지만, 전체 정확도·속도는 소폭 낮음 — "완전 대체"보다는 이 도메인에 한정된 트레이드오프 실험으로 해석</li>
+    </ul>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>1~3단계는 개인 작업물·회사 IP가 섞여 있어 설명으로만 남겼고, 4단계(REACT++ 비교)는 공개 프레임워크 기반이라 코드로 포함했습니다. 상세 내용은 <a href="https://github.com/JunleeB/CV/tree/main/location_pipeline" target="_blank">location_pipeline 코드 저장소</a>를 참고하세요.</p>
+  <p><a href="mailto:junlee5985@naver.com">junlee5985@naver.com</a> · <a href="https://github.com/JunleeB" target="_blank">github.com/JunleeB</a></p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+</body>
+</html>
